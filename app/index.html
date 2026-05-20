@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>拾链</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-mark">拾</div>
+                <div>
+                    <div class="brand-title">拾链</div>
+                    <div class="brand-subtitle">Link Keeper</div>
+                </div>
+            </div>
+
+            <div class="sidebar-section-title">目录</div>
+
+            <div class="folder-list" id="folder-list">
+                <button class="folder-item active" data-folder="__ALL__">
+                    <span class="folder-left">
+                        <span class="folder-caret-placeholder"></span>
+                        <span class="folder-name">全部书签</span>
+                    </span>
+                    <span class="folder-count">0</span>
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-panel">
+            <header class="topbar">
+                <div>
+                    <h1 id="current-folder-title">全部书签</h1>
+                    <p id="current-folder-subtitle">正在加载你的书签...</p>
+                </div>
+
+                <div class="search-wrapper">
+                    <svg class="search-icon" viewBox="0 0 24 24">
+                        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                    </svg>
+                    <input type="text" id="search" class="search-input" placeholder="搜索标题、网址或目录...">
+                </div>
+            </header>
+
+            <section class="content-area">
+                <div id="cards-wrapper" class="bookmark-list">
+                    <div class="state-text">正在加载书签...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <button class="folder-fab" id="folder-fab" title="目录" onclick="toggleFolderDrawer(event)">
+        <svg viewBox="0 0 24 24">
+            <path d="M10 4H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-9l-2-2z"/>
+        </svg>
+    </button>
+
+    <div class="drawer-scrim" id="drawer-scrim" onclick="closeFolderDrawer()"></div>
+
+    <div class="floating-menu" id="floating-menu">
+        <button class="floating-action-item" onclick="openBox()" title="添加书签">
+            <svg viewBox="0 0 24 24">
+                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+            </svg>
+            <span>添加书签</span>
+        </button>
+
+        <button class="floating-action-item" onclick="openImportFile()" title="导入书签">
+            <svg viewBox="0 0 24 24">
+                <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+            </svg>
+            <span>导入书签</span>
+        </button>
+
+        <button class="floating-add-btn" title="快捷操作" onclick="toggleFloatingMenu(event)">
+            <svg viewBox="0 0 24 24">
+                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+            </svg>
+        </button>
+    </div>
+
+    <input type="file" id="file-import" accept=".html" onchange="handleImport(event)" style="display:none;">
+
+    <div class="dialog-overlay" id="box-overlay">
+        <div class="dialog-box">
+            <div class="dialog-title" id="box-title">创建新书签</div>
+
+            <form id="bookmark-form">
+                <input type="hidden" id="bookmark-id">
+
+                <div class="input-group">
+                    <label>站点名称</label>
+                    <input type="text" id="title" required placeholder="例如：GitHub">
+                </div>
+
+                <div class="input-group">
+                    <label>URL 网址</label>
+                    <input type="text" id="url" required placeholder="https://example.com 或 example.com">
+                </div>
+
+                <div class="input-group">
+                    <label>目录</label>
+                    <input type="text" id="folder" placeholder="例如：开发工具 / Python">
+                </div>
+
+                <div class="dialog-actions">
+                    <button type="button" class="btn-close" onclick="closeBox()">取消</button>
+                    <button type="submit" class="btn-save">保存书签</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="dialog-overlay" id="folder-delete-overlay">
+        <div class="dialog-box folder-delete-box">
+            <div class="dialog-title">删除目录</div>
+
+            <p class="dialog-desc">
+                你要如何处理目录
+                <strong id="delete-folder-name"></strong>
+                ？
+            </p>
+
+            <div class="folder-delete-choice">
+                <label class="choice-row">
+                    <input type="radio" name="folder-delete-mode" value="move-up" checked>
+                    <span>
+                        保留书签到
+                        <strong id="delete-folder-parent-name"></strong>
+                    </span>
+                </label>
+
+                <label class="choice-row danger">
+                    <input type="radio" name="folder-delete-mode" value="delete-all">
+                    <span>删除书签</span>
+                </label>
+            </div>
+
+            <div class="dialog-actions">
+                <button type="button" class="btn-close" onclick="closeFolderDeleteDialog()">取消</button>
+                <button type="button" class="btn-save" onclick="confirmFolderDelete()">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="dialog-overlay" id="folder-rename-overlay">
+        <div class="dialog-box">
+            <div class="dialog-title">重命名或移动目录</div>
+
+            <p class="dialog-desc">
+                当前目录
+                <strong id="rename-folder-name"></strong>
+            </p>
+
+            <div class="input-group">
+                <label>新目录路径</label>
+                <input type="text" id="rename-folder-input" placeholder="例如：开发工具 / Python">
+            </div>
+
+            <div class="dialog-actions">
+                <button type="button" class="btn-close" onclick="closeFolderRenameDialog()">取消</button>
+                <button type="button" class="btn-save" onclick="confirmFolderRename()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="dialog-overlay" id="app-dialog-overlay">
+        <div class="dialog-box app-dialog-box">
+            <div class="dialog-title" id="app-dialog-title">提示</div>
+            <p class="dialog-message" id="app-dialog-message"></p>
+
+            <div class="dialog-actions">
+                <button type="button" class="btn-close" id="app-dialog-cancel">取消</button>
+                <button type="button" class="btn-save" id="app-dialog-confirm">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="static/app.js"></script>
+</body>
+</html>
