@@ -1,0 +1,12 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Project data (optional — ignore large/runtime data)
+data/
+app/data/
