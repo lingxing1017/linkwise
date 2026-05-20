@@ -1,0 +1,10 @@
+services:
+  bookmarks:
+    build: .
+    container_name: bookmarks-app
+    ports:
+      - "7500:7500"  # 冒号左边是VPS对外端口，可根据需要修改
+    volumes:
+      - ./app:/app
+      - ./data:/app/data  # 将容器内数据库挂载到宿主机的 ./data 目录下，确保数据不丢失
+    restart: always
