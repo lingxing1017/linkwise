@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
     <title>拾链</title>
     <link rel="stylesheet" href="static/style.css">
 </head>
@@ -13,7 +14,7 @@
                 <div class="brand-mark">拾</div>
                 <div>
                     <div class="brand-title">拾链</div>
-                    <div class="brand-subtitle">Link Keeper</div>
+                    <div class="brand-subtitle">Linkwise</div>
                 </div>
             </div>
 
@@ -46,6 +47,21 @@
             </header>
 
             <section class="content-area">
+                <div class="bulk-move-bar" id="bulk-move-bar">
+                    <label class="bulk-select-all" title="全选当前列表">
+                        <input type="checkbox" id="bulk-select-all">
+                    </label>
+
+                    <div class="bulk-move-count">
+                        已选 <strong id="bulk-selected-count">0</strong> 个
+                    </div>
+
+                    <input type="text" id="bulk-move-folder" placeholder="目标目录，例如：开发工具 / Python">
+
+                    <button type="button" class="bulk-move-btn" onclick="moveSelectedBookmarks()">移动</button>
+                    <button type="button" class="bulk-delete-btn" onclick="deleteSelectedBookmarks()">删除</button>
+                </div>
+
                 <div id="cards-wrapper" class="bookmark-list">
                     <div class="state-text">正在加载书签...</div>
                 </div>
@@ -179,6 +195,8 @@
             </div>
         </div>
     </div>
+
+    <div class="folder-suggestion-popup" id="folder-suggestion-popup"></div>
 
     <script src="static/app.js"></script>
 </body>

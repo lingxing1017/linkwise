@@ -107,6 +107,28 @@ def save_bookmark():
             return jsonify({'status': 'error', 'message': 'URL 无效'}), 400
 
         with sqlite3.connect(DB_FILE) as conn:
+            duplicate = conn.execute(
+                '''
+                SELECT id, title, url, folder
+                FROM bookmarks
+                WHERE url = ? AND id != ?
+                LIMIT 1
+                ''',
+                (url, b_id)
+            ).fetchone()
+
+            if duplicate:
+                return jsonify({
+                    'status': 'duplicate',
+                    'message': '这个 URL 已存在',
+                    'bookmark': {
+                        'id': duplicate[0],
+                        'title': duplicate[1],
+                        'url': duplicate[2],
+                        'folder': duplicate[3] or ''
+                    }
+                }), 409
+
             conn.execute(
                 'INSERT OR REPLACE INTO bookmarks (id, title, url, folder) VALUES (?, ?, ?, ?)',
                 (b_id, title, url, folder)
@@ -194,6 +216,78 @@ def bulk_save_bookmarks():
 
     except Exception as e:
         print('POST /api/bookmarks/bulk error:', e, flush=True)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/bookmarks/move', methods=['POST'])
+def move_bookmarks():
+    try:
+        data = request.get_json(silent=True) or {}
+        ids = data.get('ids', [])
+        folder = ' / '.join(
+            part.strip()
+            for part in str(data.get('folder') or '').split('/')
+            if part.strip()
+        )
+
+        if not isinstance(ids, list) or not ids:
+            return jsonify({'status': 'error', 'message': '请选择要移动的书签'}), 400
+
+        ids = [str(item).strip() for item in ids if str(item).strip()]
+
+        if not ids:
+            return jsonify({'status': 'error', 'message': '请选择要移动的书签'}), 400
+
+        placeholders = ','.join('?' for _ in ids)
+
+        with sqlite3.connect(DB_FILE) as conn:
+            cursor = conn.execute(
+                f'UPDATE bookmarks SET folder = ? WHERE id IN ({placeholders})',
+                [folder, *ids]
+            )
+            conn.commit()
+
+        return jsonify({
+            'status': 'success',
+            'moved_count': cursor.rowcount,
+            'folder': folder
+        })
+
+    except Exception as e:
+        print('POST /api/bookmarks/move error:', e, flush=True)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/bookmarks/delete', methods=['POST'])
+def delete_bookmarks():
+    try:
+        data = request.get_json(silent=True) or {}
+        ids = data.get('ids', [])
+
+        if not isinstance(ids, list) or not ids:
+            return jsonify({'status': 'error', 'message': '请选择要删除的书签'}), 400
+
+        ids = [str(item).strip() for item in ids if str(item).strip()]
+
+        if not ids:
+            return jsonify({'status': 'error', 'message': '请选择要删除的书签'}), 400
+
+        placeholders = ','.join('?' for _ in ids)
+
+        with sqlite3.connect(DB_FILE) as conn:
+            cursor = conn.execute(
+                f'DELETE FROM bookmarks WHERE id IN ({placeholders})',
+                ids
+            )
+            conn.commit()
+
+        return jsonify({
+            'status': 'success',
+            'deleted_count': cursor.rowcount
+        })
+
+    except Exception as e:
+        print('POST /api/bookmarks/delete error:', e, flush=True)
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 

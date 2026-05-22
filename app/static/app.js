@@ -1,6 +1,7 @@
 let bookmarks = [];
 let selectedFolder = '__ALL__';
 let expandedFolders = new Set();
+let selectedBookmarkIds = new Set();
 let pendingDeleteFolder = '';
 let pendingRenameFolder = '';
 
@@ -9,6 +10,7 @@ const search = document.getElementById('search');
 const overlay = document.getElementById('box-overlay');
 const form = document.getElementById('bookmark-form');
 const boxTitle = document.getElementById('box-title');
+const folderInput = document.getElementById('folder');
 const folderList = document.getElementById('folder-list');
 const currentFolderTitle = document.getElementById('current-folder-title');
 const currentFolderSubtitle = document.getElementById('current-folder-subtitle');
@@ -17,12 +19,23 @@ const appDialogTitle = document.getElementById('app-dialog-title');
 const appDialogMessage = document.getElementById('app-dialog-message');
 const appDialogCancel = document.getElementById('app-dialog-cancel');
 const appDialogConfirm = document.getElementById('app-dialog-confirm');
+const folderDeleteOverlay = document.getElementById('folder-delete-overlay');
+const folderRenameOverlay = document.getElementById('folder-rename-overlay');
 const sidebar = document.querySelector('.sidebar');
 const drawerScrim = document.getElementById('drawer-scrim');
 const floatingMenu = document.getElementById('floating-menu');
+const bulkMoveBar = document.getElementById('bulk-move-bar');
+const bulkSelectedCount = document.getElementById('bulk-selected-count');
+const bulkMoveFolder = document.getElementById('bulk-move-folder');
+const bulkSelectAll = document.getElementById('bulk-select-all');
+const bulkMoveButton = document.querySelector('.bulk-move-btn');
+const bulkDeleteButton = document.querySelector('.bulk-delete-btn');
+const renameFolderInput = document.getElementById('rename-folder-input');
+const folderSuggestionPopup = document.getElementById('folder-suggestion-popup');
 
 const API_BASE = 'api';
 let appDialogResolve = null;
+let activeFolderSuggestionInput = null;
 
 function escapeHtml(value) {
     return String(value || '')
@@ -41,10 +54,38 @@ function getDomain(url) {
     }
 }
 
-function closeAppDialog(result) {
-    if (appDialogOverlay) {
-        appDialogOverlay.style.display = 'none';
+function setOverlayVisible(overlayEl, visible) {
+    if (overlayEl) {
+        overlayEl.style.display = visible ? 'flex' : 'none';
     }
+}
+
+function openOverlay(overlayEl) {
+    setOverlayVisible(overlayEl, true);
+}
+
+function closeOverlay(overlayEl) {
+    setOverlayVisible(overlayEl, false);
+}
+
+function isOverlayOpen(overlayEl) {
+    return Boolean(overlayEl && overlayEl.style.display === 'flex');
+}
+
+function setElementVisible(element, visible, displayValue = '') {
+    if (element) {
+        element.style.display = visible ? displayValue : 'none';
+    }
+}
+
+function setClassVisible(element, className, visible) {
+    if (element) {
+        element.classList.toggle(className, visible);
+    }
+}
+
+function closeAppDialog(result) {
+    closeOverlay(appDialogOverlay);
 
     if (appDialogResolve) {
         appDialogResolve(result);
@@ -72,9 +113,9 @@ function openAppDialog({
     appDialogMessage.textContent = message;
     appDialogConfirm.textContent = confirmText;
     appDialogCancel.textContent = cancelText;
-    appDialogCancel.style.display = showCancel ? '' : 'none';
+    setElementVisible(appDialogCancel, showCancel);
     appDialogConfirm.classList.toggle('danger', danger);
-    appDialogOverlay.style.display = 'flex';
+    openOverlay(appDialogOverlay);
 
     return new Promise((resolve) => {
         appDialogResolve = resolve;
@@ -103,6 +144,18 @@ function showConfirm(message, {
         showCancel: true,
         danger
     });
+}
+
+async function parseApiJson(res, fallbackMessage = '请求失败') {
+    const contentType = res.headers.get('content-type') || '';
+
+    if (contentType.includes('application/json')) {
+        return res.json();
+    }
+
+    const text = await res.text();
+    const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 80);
+    throw new Error(`${fallbackMessage}：接口未返回 JSON（HTTP ${res.status}）。${snippet || '请检查后端服务是否已启动。'}`);
 }
 
 function normalizeFolder(folder) {
@@ -135,6 +188,159 @@ function getParentFolderPath(folder) {
 
 function normalizeFolderPath(folder) {
     return splitFolder(folder).join(' / ');
+}
+
+function getFolderSuggestions() {
+    return Array.from(
+        new Set(
+            bookmarks
+                .map(bookmark => normalizeFolderPath(bookmark.folder || ''))
+                .filter(Boolean)
+        )
+    ).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+}
+
+function getFolderSuggestionMatches(input) {
+    const keyword = String(input.value || '').trim().toLowerCase();
+    const suggestions = getFolderSuggestions();
+    const matches = keyword
+        ? suggestions.filter(folder => folder.toLowerCase().includes(keyword))
+        : suggestions;
+
+    return matches;
+}
+
+function closeFolderSuggestions() {
+    activeFolderSuggestionInput = null;
+
+    if (folderSuggestionPopup) {
+        setClassVisible(folderSuggestionPopup, 'show', false);
+        folderSuggestionPopup.innerHTML = '';
+    }
+}
+
+function positionFolderSuggestions(input) {
+    if (!folderSuggestionPopup) return;
+
+    const rect = input.getBoundingClientRect();
+    folderSuggestionPopup.style.left = `${rect.left}px`;
+    folderSuggestionPopup.style.top = `${rect.bottom + 6}px`;
+    folderSuggestionPopup.style.width = `${rect.width}px`;
+}
+
+function renderFolderSuggestions(input) {
+    if (!folderSuggestionPopup || !input || input.disabled) {
+        closeFolderSuggestions();
+        return;
+    }
+
+    const matches = getFolderSuggestionMatches(input);
+    if (matches.length === 0) {
+        closeFolderSuggestions();
+        return;
+    }
+
+    activeFolderSuggestionInput = input;
+    positionFolderSuggestions(input);
+    folderSuggestionPopup.innerHTML = matches
+        .map(folder => `
+            <button type="button" class="folder-suggestion-item" data-folder="${escapeHtml(folder)}">
+                ${escapeHtml(folder)}
+            </button>
+        `)
+        .join('');
+    setClassVisible(folderSuggestionPopup, 'show', true);
+}
+
+function setupFolderSuggestionInput(input) {
+    if (!input) return;
+
+    input.addEventListener('focus', () => renderFolderSuggestions(input));
+    input.addEventListener('input', () => renderFolderSuggestions(input));
+    input.addEventListener('blur', () => {
+        setTimeout(() => {
+            if (document.activeElement !== input) {
+                closeFolderSuggestions();
+            }
+        }, 120);
+    });
+}
+
+function refreshActiveFolderSuggestions() {
+    if (activeFolderSuggestionInput && document.activeElement === activeFolderSuggestionInput) {
+        renderFolderSuggestions(activeFolderSuggestionInput);
+    }
+}
+
+function getFolderSuggestionInputs() {
+    return [folderInput, renameFolderInput, bulkMoveFolder].filter(Boolean);
+}
+
+function getSelectedBookmarkIds() {
+    return Array.from(selectedBookmarkIds);
+}
+
+function getBookmarkIdsInFolder(folderPath) {
+    return bookmarks
+        .filter((bookmark) => {
+            const folder = String(bookmark.folder || '').trim();
+            return folder === folderPath || folder.startsWith(folderPath + ' / ');
+        })
+        .map(bookmark => String(bookmark.id || ''));
+}
+
+function getCurrentPageSelectableBookmarkIds() {
+    const ids = new Set(getVisibleBookmarks().map(bookmark => String(bookmark.id || '')));
+
+    for (const folder of getChildFolders()) {
+        for (const id of getBookmarkIdsInFolder(folder.path)) {
+            ids.add(id);
+        }
+    }
+
+    return Array.from(ids);
+}
+
+function updateBulkMoveBar() {
+    const count = selectedBookmarkIds.size;
+    const currentPageIds = getCurrentPageSelectableBookmarkIds();
+    const currentPageSelectedCount = currentPageIds.filter(id => selectedBookmarkIds.has(id)).length;
+
+    if (bulkSelectedCount) {
+        bulkSelectedCount.textContent = count;
+    }
+
+    if (bulkMoveBar) {
+        setClassVisible(bulkMoveBar, 'show', true);
+    }
+
+    if (bulkSelectAll) {
+        bulkSelectAll.checked = currentPageIds.length > 0 && currentPageSelectedCount === currentPageIds.length;
+        bulkSelectAll.indeterminate = currentPageSelectedCount > 0 && currentPageSelectedCount < currentPageIds.length;
+        bulkSelectAll.disabled = currentPageIds.length === 0;
+    }
+
+    if (bulkMoveFolder) {
+        bulkMoveFolder.disabled = count === 0;
+    }
+
+    if (bulkMoveButton) {
+        bulkMoveButton.disabled = count === 0;
+    }
+
+    if (bulkDeleteButton) {
+        bulkDeleteButton.disabled = count === 0;
+    }
+}
+
+function pruneBookmarkSelection() {
+    const existingIds = new Set(bookmarks.map(bookmark => String(bookmark.id || '')));
+
+    for (const id of selectedBookmarkIds) {
+        if (!existingIds.has(id)) {
+            selectedBookmarkIds.delete(id);
+        }
+    }
 }
 
 function hasSearchKeyword() {
@@ -265,13 +471,15 @@ function ensureParentFoldersExpanded(folderPath) {
 async function fetchList() {
     try {
         const res = await fetch(`${API_BASE}/bookmarks`);
-        const data = await res.json();
+        const data = await parseApiJson(res, '获取书签失败');
 
         if (!Array.isArray(data)) {
             throw new Error('INVALID_BOOKMARKS_RESPONSE');
         }
 
         bookmarks = data;
+        pruneBookmarkSelection();
+        refreshActiveFolderSuggestions();
 
         if (selectedFolder !== '__ALL__') {
             const selectedExists = bookmarks.some((bookmark) => {
@@ -287,6 +495,7 @@ async function fetchList() {
         ensureParentFoldersExpanded(selectedFolder);
         renderFolders();
         renderCards();
+        updateBulkMoveBar();
     } catch (err) {
         console.error('获取书签失败:', err);
         const message = err.message === 'INVALID_BOOKMARKS_RESPONSE'
@@ -494,12 +703,18 @@ function renderCards() {
                 没有匹配到任何书签
             </div>
         `;
+        updateBulkMoveBar();
         return;
     }
 
     for (const folder of childFolders) {
+        const folderBookmarkIds = getBookmarkIdsInFolder(folder.path);
+        const selectedInFolderCount = folderBookmarkIds.filter(id => selectedBookmarkIds.has(id)).length;
+        const isFolderSelected = folderBookmarkIds.length > 0 && selectedInFolderCount === folderBookmarkIds.length;
+        const isFolderPartSelected = selectedInFolderCount > 0 && selectedInFolderCount < folderBookmarkIds.length;
+
         const row = document.createElement('div');
-        row.className = 'bookmark-row folder-row';
+        row.className = `bookmark-row folder-row ${selectedInFolderCount > 0 ? 'selected' : ''}`;
 
         row.addEventListener('click', () => {
             selectedFolder = folder.path;
@@ -510,6 +725,10 @@ function renderCards() {
         });
 
         row.innerHTML = `
+            <label class="bookmark-select" title="选择目录下的书签">
+                <input type="checkbox" ${isFolderSelected ? 'checked' : ''}>
+            </label>
+
             <div class="bookmark-letter folder-letter">📁</div>
 
             <div class="bookmark-main">
@@ -525,11 +744,34 @@ function renderCards() {
             </div>
 
             <div class="bookmark-actions">
-                <button class="row-btn" onclick="event.stopPropagation(); selectedFolder='${escapeHtml(folder.path)}'; expandedFolders.add('${escapeHtml(folder.path)}'); ensureParentFoldersExpanded('${escapeHtml(folder.path)}'); renderFolders(); renderCards();">打开</button>
+                <button class="row-btn" onclick="event.stopPropagation(); handleRenameFolder('${escapeHtml(folder.path)}')">编辑</button>
+                <button class="row-btn danger" onclick="event.stopPropagation(); handleDeleteFolder('${escapeHtml(folder.path)}')">删除</button>
             </div>
         `;
 
         wrapper.appendChild(row);
+
+        const checkbox = row.querySelector('.bookmark-select input');
+        if (checkbox) {
+            checkbox.indeterminate = isFolderPartSelected;
+
+            checkbox.addEventListener('click', (event) => {
+                event.stopPropagation();
+            });
+
+            checkbox.addEventListener('change', () => {
+                for (const id of folderBookmarkIds) {
+                    if (checkbox.checked) {
+                        selectedBookmarkIds.add(id);
+                    } else {
+                        selectedBookmarkIds.delete(id);
+                    }
+                }
+
+                updateBulkMoveBar();
+                renderCards();
+            });
+        }
     }
 
     for (const bookmark of visible) {
@@ -539,16 +781,21 @@ function renderCards() {
         const domain = getDomain(url);
         const folder = normalizeFolder(bookmark.folder);
         const firstChar = titleText.charAt(0).toUpperCase() || 'B';
+        const isSelected = selectedBookmarkIds.has(id);
 
         const row = document.createElement('div');
-        row.className = 'bookmark-row';
+        row.className = `bookmark-row ${isSelected ? 'selected' : ''}`;
 
         row.addEventListener('click', (event) => {
-            if (event.target.closest('.bookmark-actions')) return;
+            if (event.target.closest('.bookmark-actions') || event.target.closest('.bookmark-select')) return;
             window.open(url, '_blank');
         });
 
         row.innerHTML = `
+            <label class="bookmark-select" title="选择书签">
+                <input type="checkbox" ${isSelected ? 'checked' : ''}>
+            </label>
+
             <div class="bookmark-letter">${escapeHtml(firstChar)}</div>
 
             <div class="bookmark-main">
@@ -570,7 +817,28 @@ function renderCards() {
         `;
 
         wrapper.appendChild(row);
+
+        const checkbox = row.querySelector('.bookmark-select input');
+        if (checkbox) {
+            checkbox.addEventListener('click', (event) => {
+                event.stopPropagation();
+            });
+
+            checkbox.addEventListener('change', () => {
+                if (checkbox.checked) {
+                    selectedBookmarkIds.add(id);
+                    row.classList.add('selected');
+                } else {
+                    selectedBookmarkIds.delete(id);
+                    row.classList.remove('selected');
+                }
+
+                updateBulkMoveBar();
+            });
+        }
     }
+
+    updateBulkMoveBar();
 }
 
 function handleDeleteFolder(folder) {
@@ -578,7 +846,6 @@ function handleDeleteFolder(folder) {
 
     const folderNameEl = document.getElementById('delete-folder-name');
     const parentNameEl = document.getElementById('delete-folder-parent-name');
-    const overlayEl = document.getElementById('folder-delete-overlay');
 
     const parentFolder = getParentFolderPath(folder);
 
@@ -595,9 +862,7 @@ function handleDeleteFolder(folder) {
         moveRadio.checked = true;
     }
 
-    if (overlayEl) {
-        overlayEl.style.display = 'flex';
-    }
+    openOverlay(folderDeleteOverlay);
 }
 
 function handleRenameFolder(folder) {
@@ -605,7 +870,6 @@ function handleRenameFolder(folder) {
 
     const folderNameEl = document.getElementById('rename-folder-name');
     const inputEl = document.getElementById('rename-folder-input');
-    const overlayEl = document.getElementById('folder-rename-overlay');
 
     if (folderNameEl) {
         folderNameEl.textContent = `「${folder}」`;
@@ -615,19 +879,15 @@ function handleRenameFolder(folder) {
         inputEl.value = folder;
     }
 
-    if (overlayEl) {
-        overlayEl.style.display = 'flex';
+    if (folderRenameOverlay) {
+        openOverlay(folderRenameOverlay);
         setTimeout(() => inputEl && inputEl.focus(), 0);
     }
 }
 
 window.closeFolderRenameDialog = function() {
     pendingRenameFolder = '';
-
-    const overlayEl = document.getElementById('folder-rename-overlay');
-    if (overlayEl) {
-        overlayEl.style.display = 'none';
-    }
+    closeOverlay(folderRenameOverlay);
 };
 
 window.confirmFolderRename = async function() {
@@ -644,11 +904,7 @@ window.confirmFolderRename = async function() {
 
 window.closeFolderDeleteDialog = function() {
     pendingDeleteFolder = '';
-
-    const overlayEl = document.getElementById('folder-delete-overlay');
-    if (overlayEl) {
-        overlayEl.style.display = 'none';
-    }
+    closeOverlay(folderDeleteOverlay);
 };
 
 window.confirmFolderDelete = async function() {
@@ -685,7 +941,7 @@ async function moveFolderBookmarksUp(folder) {
             body: JSON.stringify({ folder })
         });
 
-        const result = await res.json();
+        const result = await parseApiJson(res, '删除目录失败');
 
         if (!res.ok || result.status !== 'success') {
             await showMessage(result.message || '删除目录失败', '操作失败');
@@ -716,7 +972,7 @@ async function renameFolder(folder, newFolder) {
             })
         });
 
-        const result = await res.json();
+        const result = await parseApiJson(res, '目录更新失败');
 
         if (!res.ok || result.status !== 'success') {
             await showMessage(result.message || '目录更新失败', '操作失败');
@@ -744,7 +1000,7 @@ async function deleteFolderWithBookmarks(folder) {
             body: JSON.stringify({ folder })
         });
 
-        const result = await res.json();
+        const result = await parseApiJson(res, '彻底删除失败');
 
         if (!res.ok || result.status !== 'success') {
             await showMessage(result.message || '彻底删除失败', '操作失败');
@@ -760,6 +1016,112 @@ async function deleteFolderWithBookmarks(folder) {
         await showMessage(`彻底删除目录失败：${err.message}`, '操作失败');
     }
 }
+
+window.toggleVisibleBookmarkSelection = function(checked) {
+    for (const id of getCurrentPageSelectableBookmarkIds()) {
+        if (checked) {
+            selectedBookmarkIds.add(id);
+        } else {
+            selectedBookmarkIds.delete(id);
+        }
+    }
+
+    updateBulkMoveBar();
+    renderCards();
+};
+
+window.moveSelectedBookmarks = async function() {
+    const ids = getSelectedBookmarkIds();
+
+    if (ids.length === 0) {
+        await showMessage('请选择要移动的书签。');
+        return;
+    }
+
+    const folder = normalizeFolderPath(bulkMoveFolder ? bulkMoveFolder.value : '');
+    const targetName = folder || '全部书签';
+    const confirmed = await showConfirm(`确认将 ${ids.length} 个书签移动到「${targetName}」吗？`, {
+        title: '移动书签',
+        confirmText: '移动'
+    });
+
+    if (!confirmed) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/bookmarks/move`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                ids,
+                folder
+            })
+        });
+
+        const result = await parseApiJson(res, '移动失败');
+
+        if (!res.ok || result.status !== 'success') {
+            await showMessage(result.message || '移动失败', '移动失败');
+            return;
+        }
+
+        selectedBookmarkIds.clear();
+
+        if (bulkMoveFolder) {
+            bulkMoveFolder.value = '';
+        }
+
+        selectedFolder = result.folder || '__ALL__';
+        ensureParentFoldersExpanded(selectedFolder);
+        await fetchList();
+        await showMessage(`已移动 ${result.moved_count} 个书签。`, '移动完成');
+    } catch (err) {
+        console.error('移动书签失败:', err);
+        await showMessage(`移动失败：${err.message}`, '移动失败');
+    }
+};
+
+window.deleteSelectedBookmarks = async function() {
+    const ids = getSelectedBookmarkIds();
+
+    if (ids.length === 0) {
+        await showMessage('请选择要删除的书签。');
+        return;
+    }
+
+    const confirmed = await showConfirm(`确认删除选中的 ${ids.length} 个书签吗？这个操作不可恢复。`, {
+        title: '删除书签',
+        confirmText: '删除',
+        danger: true
+    });
+
+    if (!confirmed) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/bookmarks/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ ids })
+        });
+
+        const result = await parseApiJson(res, '删除失败');
+
+        if (!res.ok || result.status !== 'success') {
+            await showMessage(result.message || '删除失败', '删除失败');
+            return;
+        }
+
+        selectedBookmarkIds.clear();
+        await fetchList();
+        await showMessage(`已删除 ${result.deleted_count} 个书签。`, '删除完成');
+    } catch (err) {
+        console.error('批量删除失败:', err);
+        await showMessage(`删除失败：${err.message}`, '删除失败');
+    }
+};
 
 function parseBookmarksHtml(htmlContent) {
     const parser = new DOMParser();
@@ -913,7 +1275,7 @@ async function handleImport(event) {
                 })
             });
 
-            const result = await res.json();
+            const result = await parseApiJson(res, '导入失败');
 
             if (!res.ok || result.status !== 'success') {
                 await showMessage(result.message || '导入失败', '导入失败');
@@ -942,7 +1304,7 @@ window.openBox = function() {
     boxTitle.innerText = '创建新书签';
     document.getElementById('bookmark-id').value = '';
     form.reset();
-    overlay.style.display = 'flex';
+    openOverlay(overlay);
     closeFloatingMenu();
 };
 
@@ -952,7 +1314,7 @@ window.openImportFile = function() {
 };
 
 window.closeBox = function() {
-    overlay.style.display = 'none';
+    closeOverlay(overlay);
 };
 
 window.editItem = function(event, id) {
@@ -961,13 +1323,17 @@ window.editItem = function(event, id) {
     const target = bookmarks.find((bookmark) => String(bookmark.id) === String(id));
     if (!target) return;
 
-    boxTitle.innerText = '编辑书签';
-    document.getElementById('bookmark-id').value = target.id;
-    document.getElementById('title').value = target.title || '';
-    document.getElementById('url').value = target.url || '';
-    document.getElementById('folder').value = target.folder || '';
-    overlay.style.display = 'flex';
+    fillBookmarkForm(target);
 };
+
+function fillBookmarkForm(bookmark) {
+    boxTitle.innerText = '编辑书签';
+    document.getElementById('bookmark-id').value = bookmark.id;
+    document.getElementById('title').value = bookmark.title || '';
+    document.getElementById('url').value = bookmark.url || '';
+    document.getElementById('folder').value = bookmark.folder || '';
+    openOverlay(overlay);
+}
 
 window.removeItem = async function(event, id) {
     event.stopPropagation();
@@ -985,7 +1351,7 @@ window.removeItem = async function(event, id) {
             method: 'DELETE'
         });
 
-        const result = await res.json();
+        const result = await parseApiJson(res, '删除失败');
 
         if (!res.ok || result.status !== 'success') {
             await showMessage(result.message || '删除失败', '删除失败');
@@ -1023,7 +1389,27 @@ document.addEventListener('click', function(event) {
     if (floatingMenu && !floatingMenu.contains(event.target)) {
         closeFloatingMenu();
     }
+
+    if (
+        folderSuggestionPopup &&
+        !folderSuggestionPopup.contains(event.target) &&
+        !getFolderSuggestionInputs().includes(event.target)
+    ) {
+        closeFolderSuggestions();
+    }
 });
+
+if (folderSuggestionPopup) {
+    folderSuggestionPopup.addEventListener('mousedown', (event) => {
+        const item = event.target.closest('.folder-suggestion-item');
+        if (!item || !activeFolderSuggestionInput) return;
+
+        event.preventDefault();
+        activeFolderSuggestionInput.value = item.dataset.folder || '';
+        activeFolderSuggestionInput.focus();
+        closeFolderSuggestions();
+    });
+}
 
 if (floatingMenu) {
     floatingMenu.addEventListener('mouseenter', () => {
@@ -1053,7 +1439,6 @@ if (appDialogOverlay) {
     });
 }
 
-const renameFolderInput = document.getElementById('rename-folder-input');
 if (renameFolderInput) {
     renameFolderInput.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
@@ -1063,13 +1448,49 @@ if (renameFolderInput) {
     });
 }
 
+if (bulkMoveFolder) {
+    bulkMoveFolder.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            moveSelectedBookmarks();
+        }
+    });
+}
+
+if (bulkSelectAll) {
+    bulkSelectAll.addEventListener('change', () => {
+        toggleVisibleBookmarkSelection(bulkSelectAll.checked);
+    });
+}
+
+for (const input of getFolderSuggestionInputs()) {
+    setupFolderSuggestionInput(input);
+}
+
+window.addEventListener('resize', () => {
+    if (activeFolderSuggestionInput) {
+        positionFolderSuggestions(activeFolderSuggestionInput);
+    }
+});
+
+window.addEventListener('scroll', () => {
+    if (activeFolderSuggestionInput) {
+        positionFolderSuggestions(activeFolderSuggestionInput);
+    }
+}, true);
+
 document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && folderSuggestionPopup && folderSuggestionPopup.classList.contains('show')) {
+        closeFolderSuggestions();
+        return;
+    }
+
     if (event.key === 'Escape' && sidebar && sidebar.classList.contains('open')) {
         closeFolderDrawer();
         return;
     }
 
-    if (event.key === 'Escape' && appDialogOverlay && appDialogOverlay.style.display === 'flex') {
+    if (event.key === 'Escape' && isOverlayOpen(appDialogOverlay)) {
         closeAppDialog(false);
     }
 });
@@ -1096,7 +1517,21 @@ form.addEventListener('submit', async function(event) {
             })
         });
 
-        const result = await res.json();
+        const result = await parseApiJson(res, '保存失败');
+
+        if (res.status === 409 && result.status === 'duplicate') {
+            const existing = result.bookmark;
+            const shouldEdit = await showConfirm('这个 URL 已存在，要编辑原书签吗？', {
+                title: '书签已存在',
+                confirmText: '编辑原书签'
+            });
+
+            if (shouldEdit && existing) {
+                fillBookmarkForm(existing);
+            }
+
+            return;
+        }
 
         if (!res.ok || result.status !== 'success') {
             await showMessage(result.message || '保存失败', '保存失败');

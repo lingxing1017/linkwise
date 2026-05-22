@@ -1,3 +1,4 @@
+/* 1. Tokens */
 :root {
     --bg: #f6f7fb;
     --panel: #ffffff;
@@ -11,11 +12,73 @@
     --danger: #ef4444;
     --danger-soft: #fff1f2;
     --shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+    --sidebar-bg: rgba(255, 255, 255, 0.82);
+    --topbar-bg: rgba(246, 247, 251, 0.82);
+    --floating-bg: rgba(255, 255, 255, 0.96);
+    --count-bg: rgba(15, 23, 42, 0.06);
+    --active-count-bg: rgba(79, 124, 255, 0.13);
+    --selected-row-bg: rgba(79, 124, 255, 0.05);
+    --folder-row-bg: rgba(79, 124, 255, 0.04);
+    --folder-row-hover-bg: rgba(79, 124, 255, 0.08);
+    --folder-letter-bg: rgba(79, 124, 255, 0.12);
+    --topbar-border: rgba(229, 231, 235, 0.7);
+    --floating-border: rgba(229, 231, 235, 0.9);
+    --toolbar-border: rgba(79, 124, 255, 0.18);
+    --row-border: rgba(229, 231, 235, 0.86);
+    --row-hover-border: rgba(79, 124, 255, 0.25);
+    --row-selected-border: rgba(79, 124, 255, 0.46);
+    --choice-hover-border: rgba(79, 124, 255, 0.35);
+    --focus-border: rgba(79, 124, 255, 0.55);
+    --focus-ring: rgba(79, 124, 255, 0.10);
+    --dialog-scrim: rgba(15, 23, 42, 0.35);
+    --drawer-scrim-bg: rgba(15, 23, 42, 0.28);
+    --danger-hover-bg: #fff7f7;
     --radius-xl: 24px;
     --radius-lg: 18px;
     --radius-md: 12px;
+    color-scheme: light;
 }
 
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #202124;
+        --panel: #25272d;
+        --panel-soft: #2e323a;
+        --line: #3c4043;
+        --text: #e8eaed;
+        --muted: #bdc1c6;
+        --muted-2: #9aa0a6;
+        --accent: #8ab4f8;
+        --accent-soft: rgba(138, 180, 248, 0.16);
+        --danger: #ff6b6b;
+        --danger-soft: rgba(255, 107, 107, 0.14);
+        --shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+        --sidebar-bg: rgba(32, 33, 36, 0.94);
+        --topbar-bg: rgba(32, 33, 36, 0.94);
+        --floating-bg: rgba(37, 39, 45, 0.96);
+        --count-bg: rgba(232, 237, 247, 0.08);
+        --active-count-bg: rgba(138, 180, 248, 0.20);
+        --selected-row-bg: rgba(138, 180, 248, 0.10);
+        --folder-row-bg: rgba(138, 180, 248, 0.08);
+        --folder-row-hover-bg: rgba(138, 180, 248, 0.12);
+        --folder-letter-bg: rgba(138, 180, 248, 0.16);
+        --topbar-border: #3c4043;
+        --floating-border: #3c4043;
+        --toolbar-border: rgba(138, 180, 248, 0.20);
+        --row-border: #3c4043;
+        --row-hover-border: #5f6368;
+        --row-selected-border: rgba(138, 180, 248, 0.44);
+        --choice-hover-border: rgba(138, 180, 248, 0.38);
+        --focus-border: rgba(138, 180, 248, 0.62);
+        --focus-ring: rgba(138, 180, 248, 0.14);
+        --dialog-scrim: rgba(3, 7, 18, 0.58);
+        --drawer-scrim-bg: rgba(3, 7, 18, 0.52);
+        --danger-hover-bg: rgba(255, 107, 107, 0.10);
+        color-scheme: dark;
+    }
+}
+
+/* 2. Reset */
 * {
     box-sizing: border-box;
     margin: 0;
@@ -38,7 +101,7 @@ button {
     -webkit-tap-highlight-color: transparent;
 }
 
-/* App layout */
+/* 3. Layout */
 .app-shell {
     min-height: 100vh;
     display: grid;
@@ -51,7 +114,7 @@ button {
     top: 0;
     padding: 24px 18px;
     border-right: 1px solid var(--line);
-    background: rgba(255, 255, 255, 0.82);
+    background: var(--sidebar-bg);
     backdrop-filter: blur(18px);
     overflow-y: auto;
 }
@@ -61,6 +124,7 @@ button {
     display: none;
 }
 
+/* 4. Sidebar */
 .brand {
     display: flex;
     align-items: center;
@@ -103,7 +167,7 @@ button {
     text-transform: uppercase;
 }
 
-/* Folder tree */
+/* 5. Folder Tree */
 .folder-list {
     display: flex;
     flex-direction: column;
@@ -187,14 +251,14 @@ button {
     min-width: 26px;
     padding: 2px 8px;
     border-radius: 999px;
-    background: rgba(15, 23, 42, 0.06);
+    background: var(--count-bg);
     color: var(--muted);
     font-size: 12px;
     text-align: center;
 }
 
 .folder-item.active .folder-count {
-    background: rgba(79, 124, 255, 0.13);
+    background: var(--active-count-bg);
     color: var(--accent);
 }
 
@@ -206,9 +270,9 @@ button {
     min-width: 56px;
     min-height: 30px;
     padding: 4px;
-    border: 1px solid rgba(229, 231, 235, 0.9);
+    border: 1px solid var(--floating-border);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.96);
+    background: var(--floating-bg);
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
     backdrop-filter: blur(10px);
     display: flex;
@@ -255,13 +319,14 @@ button {
     color: var(--danger);
 }
 
-/* Main panel */
+/* 6. Main Panel */
 .main-panel {
     min-width: 0;
     display: flex;
     flex-direction: column;
 }
 
+/* 7. Topbar And Search */
 .topbar {
     position: sticky;
     top: 0;
@@ -271,9 +336,9 @@ button {
     gap: 24px;
     align-items: center;
     padding: 28px 34px 18px;
-    background: rgba(246, 247, 251, 0.82);
+    background: var(--topbar-bg);
     backdrop-filter: blur(18px);
-    border-bottom: 1px solid rgba(229, 231, 235, 0.7);
+    border-bottom: 1px solid var(--topbar-border);
 }
 
 .topbar h1 {
@@ -297,7 +362,7 @@ button {
     height: 46px;
     border: 1px solid var(--line);
     border-radius: 999px;
-    background: white;
+    background: var(--panel);
     outline: none;
     padding: 0 18px 0 46px;
     color: var(--text);
@@ -306,8 +371,8 @@ button {
 }
 
 .search-input:focus {
-    border-color: rgba(79, 124, 255, 0.55);
-    box-shadow: 0 0 0 4px rgba(79, 124, 255, 0.10);
+    border-color: var(--focus-border);
+    box-shadow: 0 0 0 4px var(--focus-ring);
 }
 
 .search-icon {
@@ -324,7 +389,149 @@ button {
     padding: 24px 34px 110px;
 }
 
-/* Bookmark list */
+/* 8. Bulk Toolbar */
+.bulk-move-bar {
+    display: none;
+    grid-template-columns: 24px auto minmax(220px, 420px) 96px 96px;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 14px;
+    padding: 12px 16px;
+    border: 1px solid var(--toolbar-border);
+    border-radius: 16px;
+    background: var(--floating-bg);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+}
+
+.bulk-move-bar.show {
+    display: grid;
+}
+
+.bulk-move-count {
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.bulk-move-count strong {
+    color: var(--accent);
+    font-weight: 850;
+}
+
+.bulk-select-all {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    justify-self: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.bulk-select-all input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.bulk-move-bar > input {
+    width: 100%;
+    height: 38px;
+    border: 1px solid var(--line);
+    background: var(--panel-soft);
+    border-radius: 11px;
+    outline: none;
+    padding: 0 12px;
+    color: var(--text);
+}
+
+.bulk-move-bar > input:focus {
+    background: var(--panel);
+    border-color: var(--focus-border);
+    box-shadow: 0 0 0 4px var(--focus-ring);
+}
+
+/* 9. Folder Autocomplete */
+.folder-suggestion-popup {
+    position: fixed;
+    z-index: 180;
+    display: none;
+    max-height: 248px;
+    overflow-y: auto;
+    padding: 6px;
+    border: 1px solid var(--toolbar-border);
+    border-radius: 12px;
+    background: var(--panel);
+    box-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
+}
+
+.folder-suggestion-popup.show {
+    display: grid;
+    gap: 2px;
+}
+
+.folder-suggestion-item {
+    width: 100%;
+    min-height: 34px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.35;
+    text-align: left;
+    padding: 8px 10px;
+}
+
+.folder-suggestion-item:hover,
+.folder-suggestion-item:focus {
+    background: var(--panel-soft);
+    outline: none;
+}
+
+.bulk-move-btn,
+.bulk-delete-btn {
+    height: 38px;
+    border: none;
+    border-radius: 11px;
+    padding: 0 14px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 750;
+    white-space: nowrap;
+}
+
+.bulk-move-btn {
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 10px 20px rgba(79, 124, 255, 0.18);
+}
+
+.bulk-delete-btn {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.bulk-move-btn:disabled,
+.bulk-delete-btn:disabled,
+.bulk-move-bar > input:disabled,
+.bulk-select-all:has(input:disabled) {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.bulk-select-all:has(input:disabled) input {
+    cursor: not-allowed;
+}
+
+/* 10. Bookmark List */
 .bookmark-list {
     display: flex;
     flex-direction: column;
@@ -333,12 +540,12 @@ button {
 
 .bookmark-row {
     display: grid;
-    grid-template-columns: 42px 1fr auto;
+    grid-template-columns: 24px 42px 1fr auto;
     align-items: center;
     gap: 14px;
     padding: 14px 16px;
     background: var(--panel);
-    border: 1px solid rgba(229, 231, 235, 0.86);
+    border: 1px solid var(--row-border);
     border-radius: 18px;
     box-shadow: 0 10px 28px rgba(15, 23, 42, 0.04);
     cursor: pointer;
@@ -347,8 +554,33 @@ button {
 
 .bookmark-row:hover {
     transform: translateY(-1px);
-    border-color: rgba(79, 124, 255, 0.25);
+    border-color: var(--row-hover-border);
     box-shadow: 0 14px 32px rgba(15, 23, 42, 0.07);
+}
+
+.bookmark-row.selected {
+    border-color: var(--row-selected-border);
+    background: var(--selected-row-bg);
+}
+
+.bookmark-select,
+.bookmark-select-spacer {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.bookmark-select {
+    cursor: pointer;
+}
+
+.bookmark-select input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
 }
 
 .bookmark-letter {
@@ -442,22 +674,22 @@ button {
     border-radius: var(--radius-lg);
 }
 
-/* Folder row in main content */
+/* 11. Folder Rows */
 .folder-row {
     border-style: dashed;
-    background: rgba(79, 124, 255, 0.04);
+    background: var(--folder-row-bg);
 }
 
 .folder-row:hover {
-    background: rgba(79, 124, 255, 0.08);
+    background: var(--folder-row-hover-bg);
 }
 
 .folder-letter {
-    background: rgba(79, 124, 255, 0.12);
+    background: var(--folder-letter-bg);
     color: var(--accent);
 }
 
-/* Dialog */
+/* 12. Dialogs */
 .dialog-overlay {
     position: fixed;
     inset: 0;
@@ -465,13 +697,13 @@ button {
     display: none;
     align-items: center;
     justify-content: center;
-    background: rgba(15, 23, 42, 0.35);
+    background: var(--dialog-scrim);
     backdrop-filter: blur(8px);
 }
 
 .dialog-box {
     width: min(92vw, 430px);
-    background: white;
+    background: var(--panel);
     border-radius: 24px;
     padding: 28px;
     box-shadow: var(--shadow);
@@ -528,9 +760,9 @@ button {
 }
 
 .input-group input:focus {
-    background: white;
-    border-color: rgba(79, 124, 255, 0.55);
-    box-shadow: 0 0 0 4px rgba(79, 124, 255, 0.10);
+    background: var(--panel);
+    border-color: var(--focus-border);
+    box-shadow: 0 0 0 4px var(--focus-ring);
 }
 
 .dialog-actions {
@@ -568,7 +800,7 @@ button {
     width: min(92vw, 420px);
 }
 
-/* Folder delete dialog */
+/* 13. Folder Delete Dialog */
 .folder-delete-box {
     width: min(92vw, 460px);
 }
@@ -595,8 +827,8 @@ button {
 }
 
 .choice-row:hover {
-    background: white;
-    border-color: rgba(79, 124, 255, 0.35);
+    background: var(--panel);
+    border-color: var(--choice-hover-border);
 }
 
 .choice-row input {
@@ -617,14 +849,14 @@ button {
 
 .choice-row.danger:hover {
     border-color: rgba(239, 68, 68, 0.35);
-    background: #fff7f7;
+    background: var(--danger-hover-bg);
 }
 
 .choice-row.danger input {
     accent-color: var(--danger);
 }
 
-/* Floating action menu */
+/* 14. Floating Actions */
 .folder-fab,
 .floating-add-btn {
     width: 60px;
@@ -689,7 +921,7 @@ button {
     height: 44px;
     border: none;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.96);
+    background: var(--floating-bg);
     color: var(--text);
     box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
     display: flex;
@@ -753,7 +985,7 @@ button {
     transform: rotate(45deg);
 }
 
-/* Mobile */
+/* 15. Responsive */
 @media (max-width: 860px) {
     .app-shell {
         grid-template-columns: 1fr;
@@ -783,7 +1015,7 @@ button {
         inset: 0;
         z-index: 80;
         display: block;
-        background: rgba(15, 23, 42, 0.28);
+        background: var(--drawer-scrim-bg);
         opacity: 0;
         pointer-events: none;
         transition: opacity 0.18s ease;
@@ -822,12 +1054,23 @@ button {
         padding: 18px 16px 124px;
     }
 
+    .bulk-move-bar {
+        grid-template-columns: 24px 1fr;
+    }
+
+    .bulk-move-bar > input,
+    .bulk-move-btn,
+    .bulk-delete-btn {
+        grid-column: 1 / -1;
+        width: 100%;
+    }
+
     .bookmark-row {
-        grid-template-columns: 38px 1fr;
+        grid-template-columns: 24px 38px 1fr;
     }
 
     .bookmark-actions {
-        grid-column: 2;
+        grid-column: 3;
         justify-content: flex-start;
     }
 
