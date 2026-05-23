@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light dark">
     <title>拾链</title>
-    <link rel="stylesheet" href="static/style.css">
+    <link rel="stylesheet" href="static/css/style.css">
 </head>
 <body>
     <div class="app-shell">
@@ -13,7 +13,7 @@
             <div class="brand">
                 <div class="brand-mark">拾</div>
                 <div>
-                    <div class="brand-title">拾链</div>
+                    <button type="button" class="brand-title brand-settings-btn" onclick="openSettings()">拾链</button>
                     <div class="brand-subtitle">Linkwise</div>
                 </div>
             </div>
@@ -38,11 +38,30 @@
                     <p id="current-folder-subtitle">正在加载你的书签...</p>
                 </div>
 
-                <div class="search-wrapper">
-                    <svg class="search-icon" viewBox="0 0 24 24">
-                        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-                    </svg>
-                    <input type="text" id="search" class="search-input" placeholder="搜索标题、网址或目录...">
+                <div class="topbar-actions">
+                    <div class="search-wrapper">
+                        <svg class="search-icon" viewBox="0 0 24 24">
+                            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                        </svg>
+                        <input type="text" id="search" class="search-input" placeholder="搜索标题、网址或目录...">
+                    </div>
+
+                    <div class="topbar-more" id="topbar-more-menu">
+                        <button type="button" class="topbar-more-btn" title="更多" onclick="toggleTopbarMoreMenu(event)">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                            </svg>
+                        </button>
+
+                        <div class="topbar-more-panel">
+                            <button type="button" class="topbar-more-item" onclick="exportAllBookmarks()">
+                                <svg viewBox="0 0 24 24">
+                                    <path d="M5 20h14v-2H5v2zm7-18v10.17l3.59-3.58L17 10l-5 5-5-5 1.41-1.41L11 12.17V2h1z"/>
+                                </svg>
+                                <span>导出书签</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </header>
 
@@ -56,9 +75,8 @@
                         已选 <strong id="bulk-selected-count">0</strong> 个
                     </div>
 
-                    <input type="text" id="bulk-move-folder" placeholder="目标目录，例如：开发工具 / Python">
-
                     <button type="button" class="bulk-move-btn" onclick="moveSelectedBookmarks()">移动</button>
+                    <button type="button" class="bulk-export-btn" onclick="exportSelectedBookmarks()">导出</button>
                     <button type="button" class="bulk-delete-btn" onclick="deleteSelectedBookmarks()">删除</button>
                 </div>
 
@@ -67,6 +85,20 @@
                 </div>
             </section>
         </main>
+    </div>
+
+    <div class="bulk-mini-bar" id="bulk-mini-bar">
+        <label class="bulk-mini-select-all" title="全选当前列表">
+            <input type="checkbox" id="bulk-mini-select-all">
+        </label>
+
+        <div class="bulk-mini-count">
+            已选 <strong id="bulk-mini-selected-count">0</strong> 个
+        </div>
+
+        <button type="button" class="bulk-mini-btn" onclick="moveSelectedBookmarks()">移动</button>
+        <button type="button" class="bulk-mini-btn" onclick="exportSelectedBookmarks()">导出</button>
+        <button type="button" class="bulk-mini-btn danger" onclick="deleteSelectedBookmarks()">删除</button>
     </div>
 
     <button class="folder-fab" id="folder-fab" title="目录" onclick="toggleFolderDrawer(event)">
@@ -184,6 +216,68 @@
         </div>
     </div>
 
+    <div class="dialog-overlay" id="bulk-move-overlay">
+        <div class="dialog-box">
+            <div class="dialog-title">移动书签</div>
+
+            <p class="dialog-desc">
+                将选中的
+                <strong id="move-bookmark-count">0</strong>
+                个书签移动到
+            </p>
+
+            <div class="input-group">
+                <label>目标目录</label>
+                <input type="text" id="bulk-move-folder" placeholder="例如：开发工具 / Python">
+            </div>
+
+            <div class="dialog-actions">
+                <button type="button" class="btn-close" onclick="closeBulkMoveDialog()">取消</button>
+                <button type="button" class="btn-save" onclick="confirmSelectedBookmarksMove()">移动</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="dialog-overlay" id="settings-overlay">
+        <div class="dialog-box settings-box">
+            <div class="dialog-title">设置</div>
+
+            <div class="settings-section">
+                <div class="settings-section-title">备份同步</div>
+
+                <div class="input-group">
+                    <label>WebDAV 地址</label>
+                    <input type="url" id="webdav-url" placeholder="https://example.com/dav">
+                </div>
+
+                <div class="input-group">
+                    <label>用户名</label>
+                    <input type="text" id="webdav-username" autocomplete="username" placeholder="WebDAV 用户名">
+                </div>
+
+                <div class="input-group">
+                    <label>密码</label>
+                    <input type="password" id="webdav-password" autocomplete="current-password" placeholder="WebDAV 密码或 App Password">
+                </div>
+
+                <div class="input-group">
+                    <label>远程目录</label>
+                    <input type="text" id="webdav-remote-dir" placeholder="例如：Linkwise">
+                </div>
+
+                <div class="input-group">
+                    <label>备份文件名</label>
+                    <input type="text" id="webdav-filename" placeholder="linkwise-bookmarks.html">
+                </div>
+            </div>
+
+            <div class="dialog-actions">
+                <button type="button" class="btn-close" onclick="closeSettings()">关闭</button>
+                <button type="button" class="btn-save" onclick="saveWebdavConfig()">保存配置</button>
+            </div>
+        </div>
+    </div>
+
     <div class="dialog-overlay" id="app-dialog-overlay">
         <div class="dialog-box app-dialog-box">
             <div class="dialog-title" id="app-dialog-title">提示</div>
@@ -198,6 +292,8 @@
 
     <div class="folder-suggestion-popup" id="folder-suggestion-popup"></div>
 
-    <script src="static/app.js"></script>
+    <script src="static/js/utils.js"></script>
+    <script src="static/js/dialog.js"></script>
+    <script src="static/js/app.js"></script>
 </body>
 </html>

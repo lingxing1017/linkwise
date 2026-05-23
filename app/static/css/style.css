@@ -151,6 +151,30 @@ button {
     letter-spacing: 0.2px;
 }
 
+.brand-settings-btn {
+    display: block;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    line-height: normal;
+    padding: 2px 4px;
+    margin: 0 0 0 -4px;
+    text-align: left;
+    transition: color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.brand-settings-btn:hover {
+    color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.brand-settings-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 4px var(--focus-ring);
+}
+
 .brand-subtitle {
     margin-top: 2px;
     font-size: 12px;
@@ -353,6 +377,15 @@ button {
     font-size: 14px;
 }
 
+.topbar-actions {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(220px, 420px) 46px;
+    gap: 10px;
+    align-items: center;
+    justify-content: end;
+}
+
 .search-wrapper {
     position: relative;
 }
@@ -385,6 +418,85 @@ button {
     fill: var(--muted-2);
 }
 
+.topbar-more {
+    position: relative;
+}
+
+.topbar-more-btn {
+    width: 46px;
+    height: 46px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+    transition: color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.topbar-more-btn svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+}
+
+.topbar-more-btn:hover,
+.topbar-more.open .topbar-more-btn {
+    color: var(--accent);
+    border-color: var(--focus-border);
+    box-shadow: 0 0 0 4px var(--focus-ring);
+}
+
+.topbar-more-panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 10px);
+    z-index: 30;
+    min-width: 148px;
+    padding: 6px;
+    border: 1px solid var(--floating-border);
+    border-radius: 14px;
+    background: var(--floating-bg);
+    box-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
+    backdrop-filter: blur(10px);
+    display: none;
+}
+
+.topbar-more.open .topbar-more-panel {
+    display: block;
+}
+
+.topbar-more-item {
+    width: 100%;
+    height: 38px;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 10px;
+    font-size: 13px;
+    font-weight: 750;
+    text-align: left;
+}
+
+.topbar-more-item svg {
+    width: 17px;
+    height: 17px;
+    fill: currentColor;
+}
+
+.topbar-more-item:hover {
+    background: var(--panel-soft);
+    color: var(--accent);
+}
+
 .content-area {
     padding: 24px 34px 110px;
 }
@@ -392,7 +504,7 @@ button {
 /* 8. Bulk Toolbar */
 .bulk-move-bar {
     display: none;
-    grid-template-columns: 24px auto minmax(220px, 420px) 96px 96px;
+    grid-template-columns: 24px 1fr 96px 96px 96px;
     align-items: center;
     gap: 14px;
     margin-bottom: 14px;
@@ -407,51 +519,143 @@ button {
     display: grid;
 }
 
-.bulk-move-count {
-    color: var(--muted);
-    font-size: 14px;
-    font-weight: 700;
-    white-space: nowrap;
-}
-
-.bulk-move-count strong {
-    color: var(--accent);
-    font-weight: 850;
-}
-
-.bulk-select-all {
+.bulk-select-all,
+.bulk-mini-select-all {
     width: 24px;
     height: 24px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    justify-self: center;
-    gap: 8px;
     cursor: pointer;
 }
 
-.bulk-select-all input {
+.bulk-select-all {
+    justify-self: center;
+    gap: 8px;
+}
+
+.bulk-select-all input,
+.bulk-mini-select-all input {
     width: 16px;
     height: 16px;
     accent-color: var(--accent);
     cursor: pointer;
 }
 
-.bulk-move-bar > input {
-    width: 100%;
-    height: 38px;
-    border: 1px solid var(--line);
-    background: var(--panel-soft);
-    border-radius: 11px;
-    outline: none;
-    padding: 0 12px;
-    color: var(--text);
+.bulk-move-count,
+.bulk-mini-count {
+    color: var(--muted);
+    font-weight: 750;
+    white-space: nowrap;
 }
 
-.bulk-move-bar > input:focus {
-    background: var(--panel);
-    border-color: var(--focus-border);
-    box-shadow: 0 0 0 4px var(--focus-ring);
+.bulk-move-count {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.bulk-mini-count {
+    font-size: 13px;
+}
+
+.bulk-move-count strong,
+.bulk-mini-count strong {
+    color: var(--accent);
+    font-weight: 850;
+}
+
+.bulk-move-btn,
+.bulk-export-btn,
+.bulk-delete-btn {
+    height: 38px;
+    border: none;
+    border-radius: 11px;
+    padding: 0 14px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 750;
+    white-space: nowrap;
+}
+
+.bulk-move-btn {
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 10px 20px rgba(79, 124, 255, 0.18);
+}
+
+.bulk-export-btn {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.bulk-delete-btn {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.bulk-move-btn:disabled,
+.bulk-export-btn:disabled,
+.bulk-delete-btn:disabled,
+.bulk-select-all:has(input:disabled),
+.bulk-mini-select-all:has(input:disabled) {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.bulk-select-all:has(input:disabled) input,
+.bulk-mini-select-all:has(input:disabled) input {
+    cursor: not-allowed;
+}
+
+.bulk-mini-bar {
+    position: fixed;
+    left: 50%;
+    bottom: 22px;
+    z-index: 25;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 7px 8px 7px 12px;
+    border: 1px solid var(--toolbar-border);
+    border-radius: 999px;
+    background: var(--floating-bg);
+    box-shadow: 0 18px 44px rgba(15, 23, 42, 0.16);
+    backdrop-filter: blur(12px);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(16px) scale(0.98);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.bulk-mini-select-all {
+    flex: 0 0 auto;
+}
+
+.bulk-mini-bar.show {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.bulk-mini-btn {
+    min-width: 56px;
+    height: 34px;
+    border: none;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    cursor: pointer;
+    padding: 0 13px;
+    font-size: 13px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.bulk-mini-btn.danger {
+    background: var(--danger-soft);
+    color: var(--danger);
 }
 
 /* 9. Folder Autocomplete */
@@ -493,42 +697,6 @@ button {
 .folder-suggestion-item:focus {
     background: var(--panel-soft);
     outline: none;
-}
-
-.bulk-move-btn,
-.bulk-delete-btn {
-    height: 38px;
-    border: none;
-    border-radius: 11px;
-    padding: 0 14px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 750;
-    white-space: nowrap;
-}
-
-.bulk-move-btn {
-    background: var(--accent);
-    color: white;
-    box-shadow: 0 10px 20px rgba(79, 124, 255, 0.18);
-}
-
-.bulk-delete-btn {
-    background: var(--danger-soft);
-    color: var(--danger);
-}
-
-.bulk-move-btn:disabled,
-.bulk-delete-btn:disabled,
-.bulk-move-bar > input:disabled,
-.bulk-select-all:has(input:disabled) {
-    opacity: 0.45;
-    cursor: not-allowed;
-    box-shadow: none;
-}
-
-.bulk-select-all:has(input:disabled) input {
-    cursor: not-allowed;
 }
 
 /* 10. Bookmark List */
@@ -800,6 +968,28 @@ button {
     width: min(92vw, 420px);
 }
 
+.settings-box {
+    width: min(92vw, 540px);
+}
+
+.settings-section {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--panel-soft);
+    padding: 18px 18px 2px;
+}
+
+.settings-section-title {
+    margin-bottom: 16px;
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 850;
+}
+
+.settings-section .input-group input {
+    background: var(--panel);
+}
+
 /* 13. Folder Delete Dialog */
 .folder-delete-box {
     width: min(92vw, 460px);
@@ -910,7 +1100,7 @@ button {
     right: 0;
     bottom: 100%;
     width: 60px;
-    height: 80px;
+    height: 84px;
     pointer-events: auto;
 }
 
@@ -987,10 +1177,12 @@ button {
 
 /* 15. Responsive */
 @media (max-width: 860px) {
+    /* Layout */
     .app-shell {
         grid-template-columns: 1fr;
     }
 
+    /* Mobile Drawer */
     .sidebar {
         position: fixed;
         left: 0;
@@ -1026,10 +1218,11 @@ button {
         pointer-events: auto;
     }
 
+    /* Mobile Floating Entry */
     .folder-fab {
         display: flex;
         left: 20px;
-        bottom: 20px;
+        bottom: calc(20px + env(safe-area-inset-bottom));
         width: 52px;
         height: 52px;
     }
@@ -1045,26 +1238,59 @@ button {
         min-width: 0;
     }
 
+    /* Mobile Topbar */
     .topbar {
         grid-template-columns: 1fr;
-        padding: 20px 16px 16px;
+        gap: 16px;
+        padding: 16px 14px 12px;
     }
 
+    .topbar h1 {
+        font-size: 24px;
+    }
+
+    .topbar p {
+        margin-top: 4px;
+        font-size: 13px;
+    }
+
+    .topbar-actions {
+        grid-template-columns: minmax(0, 1fr) 42px;
+        gap: 8px;
+    }
+
+    .search-input,
+    .topbar-more-btn {
+        height: 42px;
+    }
+
+    .topbar-more-btn {
+        width: 42px;
+    }
+
+    /* Mobile Content And Bulk Actions */
     .content-area {
-        padding: 18px 16px 124px;
+        padding: 16px 14px 160px;
     }
 
-    .bulk-move-bar {
-        grid-template-columns: 24px 1fr;
+    .bulk-move-bar,
+    .bulk-move-bar.show {
+        display: none;
     }
 
-    .bulk-move-bar > input,
-    .bulk-move-btn,
-    .bulk-delete-btn {
-        grid-column: 1 / -1;
-        width: 100%;
+    .bulk-mini-bar {
+        right: 16px;
+        left: 16px;
+        bottom: calc(16px + env(safe-area-inset-bottom));
+        justify-content: space-between;
+        transform: translateY(16px) scale(0.98);
     }
 
+    .bulk-mini-bar.show {
+        transform: translateY(0) scale(1);
+    }
+
+    /* Mobile Bookmark Rows */
     .bookmark-row {
         grid-template-columns: 24px 38px 1fr;
     }
@@ -1078,9 +1304,10 @@ button {
         max-width: 160px;
     }
 
+    /* Mobile Add Menu */
     .floating-menu {
         right: 20px;
-        bottom: 20px;
+        bottom: calc(20px + env(safe-area-inset-bottom));
         width: 52px;
         height: 52px;
     }
@@ -1102,5 +1329,13 @@ button {
 
     .floating-action-item:nth-of-type(2) {
         bottom: calc(100% + 12px);
+    }
+
+    /* Selection mode gives the bottom action bar priority. */
+    body:has(.bulk-mini-bar.show) .folder-fab,
+    body:has(.bulk-mini-bar.show) .floating-menu {
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(12px) scale(0.92);
     }
 }
