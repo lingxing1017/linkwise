@@ -10,3 +10,4 @@ __pycache__/
 # Project data (optional — ignore large/runtime data)
 data/
 app/data/
+secrets/
