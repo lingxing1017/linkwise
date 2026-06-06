@@ -1157,6 +1157,11 @@ button {
     bottom: 100%;
     width: 60px;
     height: 84px;
+    pointer-events: none;
+}
+
+.floating-menu.open::before,
+.floating-menu.hover::before {
     pointer-events: auto;
 }
 
