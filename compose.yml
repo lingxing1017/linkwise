@@ -7,4 +7,10 @@ services:
     volumes:
       - ./app:/app
       - ./data:/app/data  # 将容器内数据库挂载到宿主机的 ./data 目录下，确保数据不丢失
+    secrets:
+      - linkwise_secret_key
     restart: always
+
+secrets:
+  linkwise_secret_key:
+    file: ./secrets/linkwise_secret_key

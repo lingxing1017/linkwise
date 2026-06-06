@@ -3,7 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # 极简安装 Flask 依赖
-RUN pip install --no-cache-dir flask gunicorn
+RUN pip install --no-cache-dir flask gunicorn cryptography
 
 # 暴露端口
 EXPOSE 7500
