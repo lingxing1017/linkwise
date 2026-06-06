@@ -76,8 +76,9 @@
                     </div>
 
                     <button type="button" class="bulk-move-btn" onclick="moveSelectedBookmarks()">移动</button>
-                    <button type="button" class="bulk-export-btn" onclick="exportSelectedBookmarks()">导出</button>
+                    <button type="button" class="bulk-export-btn" id="bulk-export-btn" onclick="exportSelectedBookmarks()">导出</button>
                     <button type="button" class="bulk-delete-btn" onclick="deleteSelectedBookmarks()">删除</button>
+                    <button type="button" class="bulk-finish-btn" id="bulk-finish-btn" onclick="closeLastImportView()" hidden>完成整理</button>
                 </div>
 
                 <div id="cards-wrapper" class="bookmark-list">
@@ -97,8 +98,9 @@
         </div>
 
         <button type="button" class="bulk-mini-btn" onclick="moveSelectedBookmarks()">移动</button>
-        <button type="button" class="bulk-mini-btn" onclick="exportSelectedBookmarks()">导出</button>
+        <button type="button" class="bulk-mini-btn" id="bulk-mini-export-btn" onclick="exportSelectedBookmarks()">导出</button>
         <button type="button" class="bulk-mini-btn danger" onclick="deleteSelectedBookmarks()">删除</button>
+        <button type="button" class="bulk-mini-btn" id="bulk-mini-finish-btn" onclick="closeLastImportView()" hidden>完成整理</button>
     </div>
 
     <button class="folder-fab" id="folder-fab" title="目录" onclick="toggleFolderDrawer(event)">

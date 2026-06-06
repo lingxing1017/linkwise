@@ -501,6 +501,54 @@ button {
     padding: 24px 34px 110px;
 }
 
+/* Import Group Divider */
+.import-group-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 18px 0 8px;
+    padding: 8px 14px;
+    border-radius: 11px;
+    background: var(--accent-soft);
+    border: 1px solid var(--toolbar-border);
+}
+
+.import-group-divider:first-child {
+    margin-top: 0;
+}
+
+.import-group-select {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.import-group-select input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.import-group-name {
+    flex: 1;
+    min-width: 0;
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 800;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.import-group-count {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 750;
+    white-space: nowrap;
+}
+
 /* 8. Bulk Toolbar */
 .bulk-move-bar {
     display: none;
@@ -566,7 +614,8 @@ button {
 
 .bulk-move-btn,
 .bulk-export-btn,
-.bulk-delete-btn {
+.bulk-delete-btn,
+.bulk-finish-btn {
     height: 38px;
     border: none;
     border-radius: 11px;
@@ -577,7 +626,8 @@ button {
     white-space: nowrap;
 }
 
-.bulk-move-btn {
+.bulk-move-btn,
+.bulk-finish-btn {
     background: var(--accent);
     color: white;
     box-shadow: 0 10px 20px rgba(79, 124, 255, 0.18);
@@ -656,6 +706,12 @@ button {
 .bulk-mini-btn.danger {
     background: var(--danger-soft);
     color: var(--danger);
+}
+
+.bulk-export-btn[hidden],
+.bulk-finish-btn[hidden],
+.bulk-mini-btn[hidden] {
+    display: none;
 }
 
 /* 9. Folder Autocomplete */

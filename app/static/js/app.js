@@ -2,6 +2,7 @@ let bookmarks = [];
 let selectedFolder = '__ALL__';
 let expandedFolders = new Set();
 let selectedBookmarkIds = new Set();
+let lastImportedBookmarkIds = new Set();
 let pendingDeleteFolder = '';
 let pendingRenameFolder = '';
 
@@ -33,6 +34,9 @@ const bulkSelectAll = document.getElementById('bulk-select-all');
 const bulkMoveButton = document.querySelector('.bulk-move-btn');
 const bulkExportButton = document.querySelector('.bulk-export-btn');
 const bulkDeleteButton = document.querySelector('.bulk-delete-btn');
+const bulkFinishButton = document.getElementById('bulk-finish-btn');
+const bulkMiniExportButton = document.getElementById('bulk-mini-export-btn');
+const bulkMiniFinishButton = document.getElementById('bulk-mini-finish-btn');
 const renameFolderInput = document.getElementById('rename-folder-input');
 const folderSuggestionPopup = document.getElementById('folder-suggestion-popup');
 const settingsOverlay = document.getElementById('settings-overlay');
@@ -43,6 +47,8 @@ const webdavRemoteDirInput = document.getElementById('webdav-remote-dir');
 const webdavFilenameInput = document.getElementById('webdav-filename');
 
 const API_BASE = 'api';
+const ALL_BOOKMARKS_VIEW = '__ALL__';
+const LAST_IMPORT_VIEW = '__LAST_IMPORT__';
 let activeFolderSuggestionInput = null;
 
 function syncTopbarHeight() {
@@ -150,11 +156,21 @@ function getBookmarkIdsInFolder(folderPath) {
         .map(bookmark => String(bookmark.id || ''));
 }
 
+function getFolderRowBookmarkIds(folderPath) {
+    const ids = getBookmarkIdsInFolder(folderPath);
+
+    if (selectedFolder === LAST_IMPORT_VIEW) {
+        return ids.filter(id => lastImportedBookmarkIds.has(id));
+    }
+
+    return ids;
+}
+
 function getCurrentPageSelectableBookmarkIds() {
     const ids = new Set(getVisibleBookmarks().map(bookmark => String(bookmark.id || '')));
 
     for (const folder of getChildFolders()) {
-        for (const id of getBookmarkIdsInFolder(folder.path)) {
+        for (const id of getFolderRowBookmarkIds(folder.path)) {
             ids.add(id);
         }
     }
@@ -237,6 +253,20 @@ function pruneBookmarkSelection() {
     }
 }
 
+function pruneLastImportedBookmarks() {
+    const existingIds = new Set(bookmarks.map(bookmark => String(bookmark.id || '')));
+
+    for (const id of lastImportedBookmarkIds) {
+        if (!existingIds.has(id)) {
+            lastImportedBookmarkIds.delete(id);
+        }
+    }
+
+    if (selectedFolder === LAST_IMPORT_VIEW && lastImportedBookmarkIds.size === 0) {
+        selectedFolder = ALL_BOOKMARKS_VIEW;
+    }
+}
+
 function hasSearchKeyword() {
     return Boolean(String(search.value || '').trim());
 }
@@ -271,10 +301,41 @@ window.toggleFolderDrawer = function(event) {
     closeTopbarMoreMenu();
 };
 
+function showLastImportedBookmarks() {
+    if (lastImportedBookmarkIds.size === 0) {
+        return;
+    }
+
+    selectedFolder = LAST_IMPORT_VIEW;
+    selectedBookmarkIds.clear();
+
+    if (search) {
+        search.value = '';
+    }
+
+    renderFolders();
+    renderCards();
+    closeFolderDrawer();
+}
+
+function closeLastImportView() {
+    lastImportedBookmarkIds.clear();
+
+    if (selectedFolder === LAST_IMPORT_VIEW) {
+        selectedFolder = ALL_BOOKMARKS_VIEW;
+    }
+
+    selectedBookmarkIds.clear();
+    renderFolders();
+    renderCards();
+}
+
+window.closeLastImportView = closeLastImportView;
+
 function isInCurrentFolder(bookmarkFolder) {
     const folder = String(bookmarkFolder || '').trim();
 
-    if (selectedFolder === '__ALL__') {
+    if (selectedFolder === ALL_BOOKMARKS_VIEW) {
         return true;
     }
 
@@ -285,10 +346,13 @@ function getVisibleBookmarks() {
     const keyword = String(search.value || '').toLowerCase().trim();
 
     return bookmarks.filter((bookmark) => {
+        const id = String(bookmark.id || '');
         const folder = String(bookmark.folder || '').trim();
         const displayFolder = normalizeFolder(folder);
 
-        const matchFolder = hasSearchKeyword() || isInCurrentFolder(folder);
+        const matchFolder = selectedFolder === LAST_IMPORT_VIEW
+            ? lastImportedBookmarkIds.has(id)
+            : hasSearchKeyword() || isInCurrentFolder(folder);
 
         const matchKeyword =
             !keyword ||
@@ -301,7 +365,11 @@ function getVisibleBookmarks() {
 }
 
 function getChildFolders() {
-    if (selectedFolder === '__ALL__' || hasSearchKeyword()) {
+    if (hasSearchKeyword()) {
+        return [];
+    }
+
+    if (selectedFolder === LAST_IMPORT_VIEW || selectedFolder === ALL_BOOKMARKS_VIEW) {
         return [];
     }
 
@@ -345,8 +413,12 @@ function getChildFolders() {
 }
 
 function getFolderAllBookmarkCount(folderPath) {
-    if (folderPath === '__ALL__') {
+    if (folderPath === ALL_BOOKMARKS_VIEW) {
         return bookmarks.length;
+    }
+
+    if (folderPath === LAST_IMPORT_VIEW) {
+        return bookmarks.filter(bookmark => lastImportedBookmarkIds.has(String(bookmark.id || ''))).length;
     }
 
     return bookmarks.filter(bookmark => {
@@ -374,16 +446,17 @@ async function fetchList() {
 
         bookmarks = data;
         pruneBookmarkSelection();
+        pruneLastImportedBookmarks();
         refreshActiveFolderSuggestions();
 
-        if (selectedFolder !== '__ALL__') {
+        if (selectedFolder !== ALL_BOOKMARKS_VIEW && selectedFolder !== LAST_IMPORT_VIEW) {
             const selectedExists = bookmarks.some((bookmark) => {
                 const folder = String(bookmark.folder || '').trim();
                 return folder === selectedFolder || folder.startsWith(selectedFolder + ' / ');
             });
 
             if (!selectedExists) {
-                selectedFolder = '__ALL__';
+                selectedFolder = ALL_BOOKMARKS_VIEW;
             }
         }
 
@@ -453,7 +526,7 @@ function renderFolders() {
         createFolderTreeButton({
             label: '全部书签',
             count: bookmarks.length,
-            value: '__ALL__',
+            value: ALL_BOOKMARKS_VIEW,
             level: 0,
             hasChildren: false
         })
@@ -492,14 +565,14 @@ function renderFolderNode(node, level) {
     }
 }
 
-function createFolderTreeButton({ label, count, value, level, hasChildren }) {
+function createFolderTreeButton({ label, count, value, level, hasChildren, canManage = null }) {
     const button = document.createElement('button');
     button.className = `folder-item ${selectedFolder === value ? 'active' : ''}`;
     button.dataset.folder = value;
     button.style.setProperty('--level', level);
 
     const isExpanded = expandedFolders.has(value);
-    const canDelete = value !== '__ALL__';
+    const showActions = canManage ?? (value !== ALL_BOOKMARKS_VIEW && value !== LAST_IMPORT_VIEW);
 
     button.innerHTML = `
         <span class="folder-left">
@@ -514,7 +587,7 @@ function createFolderTreeButton({ label, count, value, level, hasChildren }) {
         <span class="folder-right">
             <span class="folder-count">${count}</span>
             ${
-                canDelete
+                showActions
                     ? `
                     <span class="folder-actions">
                         <span class="folder-edit" data-action="rename-folder" title="重命名或移动目录">✎</span>
@@ -574,21 +647,82 @@ function createFolderTreeButton({ label, count, value, level, hasChildren }) {
     return button;
 }
 
+function createImportGroupDivider(folder) {
+    const folderLabel = folder || '未分类';
+    const groupIds = getVisibleBookmarks()
+        .filter(bookmark => normalizeFolder(bookmark.folder) === folder)
+        .map(bookmark => String(bookmark.id || ''));
+    const selectedCount = groupIds.filter(id => selectedBookmarkIds.has(id)).length;
+    const allSelected = groupIds.length > 0 && selectedCount === groupIds.length;
+    const partSelected = selectedCount > 0 && selectedCount < groupIds.length;
+
+    const divider = document.createElement('div');
+    divider.className = 'import-group-divider';
+    divider.innerHTML = `
+        <label class="import-group-select" title="选择该目录下的书签">
+            <input type="checkbox" ${allSelected ? 'checked' : ''}>
+        </label>
+        <span class="import-group-name" title="${escapeHtml(folderLabel)}">${escapeHtml(folderLabel)}</span>
+        <span class="import-group-count">${groupIds.length} 个</span>
+    `;
+
+    const checkbox = divider.querySelector('.import-group-select input');
+    if (checkbox) {
+        checkbox.indeterminate = partSelected;
+
+        checkbox.addEventListener('change', () => {
+            for (const id of groupIds) {
+                if (checkbox.checked) {
+                    selectedBookmarkIds.add(id);
+                } else {
+                    selectedBookmarkIds.delete(id);
+                }
+            }
+
+            updateBulkMoveBar();
+            renderCards();
+        });
+    }
+
+    return divider;
+}
+
 function renderCards() {
     const visible = getVisibleBookmarks();
     const childFolders = getChildFolders();
 
     const isSearching = hasSearchKeyword();
-    const title = isSearching
+    const isLastImportView = selectedFolder === LAST_IMPORT_VIEW;
+    const title = isLastImportView
+        ? '本次新增'
+        : isSearching
         ? '搜索结果'
-        : selectedFolder === '__ALL__'
+        : selectedFolder === ALL_BOOKMARKS_VIEW
             ? '全部书签'
             : selectedFolder;
 
     currentFolderTitle.textContent = title;
-    currentFolderSubtitle.textContent = isSearching
+    currentFolderSubtitle.textContent = isLastImportView
+        ? `本次导入新增 ${getFolderAllBookmarkCount(LAST_IMPORT_VIEW)} 个书签，当前显示 ${visible.length} 个`
+        : isSearching
         ? `在全部书签中找到 ${visible.length} 个结果，共 ${bookmarks.length} 个书签`
         : `${childFolders.length} 个子目录，${visible.length} 个书签，共 ${bookmarks.length} 个书签`;
+
+    if (bulkExportButton) {
+        bulkExportButton.hidden = isLastImportView;
+    }
+
+    if (bulkFinishButton) {
+        bulkFinishButton.hidden = !isLastImportView;
+    }
+
+    if (bulkMiniExportButton) {
+        bulkMiniExportButton.hidden = isLastImportView;
+    }
+
+    if (bulkMiniFinishButton) {
+        bulkMiniFinishButton.hidden = !isLastImportView;
+    }
 
     wrapper.innerHTML = '';
 
@@ -603,7 +737,7 @@ function renderCards() {
     }
 
     for (const folder of childFolders) {
-        const folderBookmarkIds = getBookmarkIdsInFolder(folder.path);
+        const folderBookmarkIds = getFolderRowBookmarkIds(folder.path);
         const selectedInFolderCount = folderBookmarkIds.filter(id => selectedBookmarkIds.has(id)).length;
         const isFolderSelected = folderBookmarkIds.length > 0 && selectedInFolderCount === folderBookmarkIds.length;
         const isFolderPartSelected = selectedInFolderCount > 0 && selectedInFolderCount < folderBookmarkIds.length;
@@ -611,7 +745,9 @@ function renderCards() {
         const row = document.createElement('div');
         row.className = `bookmark-row folder-row ${selectedInFolderCount > 0 ? 'selected' : ''}`;
 
-        row.addEventListener('click', () => {
+        row.addEventListener('click', (event) => {
+            if (event.target.closest('.bookmark-actions') || event.target.closest('.bookmark-select')) return;
+
             selectedFolder = folder.path;
             expandedFolders.add(folder.path);
             ensureParentFoldersExpanded(folder.path);
@@ -669,7 +805,14 @@ function renderCards() {
         }
     }
 
-    for (const bookmark of visible) {
+    const orderedVisible = isLastImportView
+        ? [...visible].sort((a, b) =>
+            normalizeFolder(a.folder).localeCompare(normalizeFolder(b.folder), 'zh-CN'))
+        : visible;
+
+    let lastGroupFolder = null;
+
+    for (const bookmark of orderedVisible) {
         const id = String(bookmark.id || '');
         const titleText = String(bookmark.title || '未命名书签');
         const url = String(bookmark.url || '');
@@ -677,6 +820,11 @@ function renderCards() {
         const folder = normalizeFolder(bookmark.folder);
         const firstChar = titleText.charAt(0).toUpperCase() || 'B';
         const isSelected = selectedBookmarkIds.has(id);
+
+        if (isLastImportView && folder !== lastGroupFolder) {
+            lastGroupFolder = folder;
+            wrapper.appendChild(createImportGroupDivider(folder));
+        }
 
         const row = document.createElement('div');
         row.className = `bookmark-row ${isSelected ? 'selected' : ''}`;
@@ -845,7 +993,7 @@ async function moveFolderBookmarksUp(folder) {
 
         await showMessage(`已删除目录，移动 ${result.moved_count} 个书签到上一层。`, '操作完成');
 
-        selectedFolder = result.parent_folder || '__ALL__';
+        selectedFolder = result.parent_folder || ALL_BOOKMARKS_VIEW;
         ensureParentFoldersExpanded(selectedFolder);
         await fetchList();
     } catch (err) {
@@ -876,7 +1024,7 @@ async function renameFolder(folder, newFolder) {
 
         await showMessage(`已更新 ${result.renamed_count} 个书签的目录。`, '操作完成');
 
-        selectedFolder = result.new_folder || '__ALL__';
+        selectedFolder = result.new_folder || ALL_BOOKMARKS_VIEW;
         ensureParentFoldersExpanded(selectedFolder);
         await fetchList();
     } catch (err) {
@@ -904,7 +1052,7 @@ async function deleteFolderWithBookmarks(folder) {
 
         await showMessage(`已彻底删除 ${result.deleted_count} 个书签。`, '操作完成');
 
-        selectedFolder = '__ALL__';
+        selectedFolder = ALL_BOOKMARKS_VIEW;
         await fetchList();
     } catch (err) {
         console.error('彻底删除目录失败:', err);
@@ -994,7 +1142,7 @@ window.confirmSelectedBookmarksMove = async function() {
             bulkMoveFolder.value = '';
         }
 
-        selectedFolder = result.folder || '__ALL__';
+        selectedFolder = result.folder || ALL_BOOKMARKS_VIEW;
         ensureParentFoldersExpanded(selectedFolder);
         await fetchList();
         await showMessage(`已移动 ${result.moved_count} 个书签。`, '移动完成');
@@ -1318,14 +1466,36 @@ async function handleImport(event) {
             }
 
             const skippedTotal = (result.duplicate_count || 0) + (result.skipped_count || 0);
+            const importedIds = Array.isArray(result.imported_ids)
+                ? result.imported_ids.map(id => String(id || '')).filter(Boolean)
+                : [];
+
+            lastImportedBookmarkIds = new Set(importedIds);
+
+            event.target.value = '';
+            await fetchList();
+
+            if (importedIds.length > 0) {
+                const shouldViewImported = await showConfirm(
+                    `导入完成：新增 ${result.imported_count} 个，跳过 ${skippedTotal} 个。`,
+                    {
+                        title: '导入完成',
+                        confirmText: '查看本次新增',
+                        cancelText: '知道了'
+                    }
+                );
+
+                if (shouldViewImported) {
+                    showLastImportedBookmarks();
+                }
+
+                return;
+            }
 
             await showMessage(
                 `导入完成：新增 ${result.imported_count} 个，跳过 ${skippedTotal} 个。`,
                 '导入完成'
             );
-
-            event.target.value = '';
-            await fetchList();
         } catch (err) {
             console.error('导入失败:', err);
             await showMessage(`导入失败：${err.message}`, '导入失败');

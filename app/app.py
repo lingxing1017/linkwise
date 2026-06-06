@@ -497,6 +497,7 @@ def bulk_save_bookmarks():
         return jsonify({
             'status': 'success',
             'imported_count': len(valid_items),
+            'imported_ids': [item[0] for item in valid_items],
             'duplicate_count': duplicate_count,
             'skipped_count': skipped,
             'total_count': total_count
