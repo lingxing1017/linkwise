@@ -181,6 +181,14 @@ button {
     color: var(--muted);
 }
 
+.sidebar-section {
+    margin-top: 24px;
+}
+
+.brand + .sidebar-section {
+    margin-top: 0;
+}
+
 .sidebar-section-title {
     padding: 0 8px;
     margin-bottom: 10px;
@@ -231,8 +239,7 @@ button {
     gap: 6px;
 }
 
-.folder-caret,
-.folder-caret-placeholder {
+.folder-caret {
     width: 16px;
     height: 16px;
     flex: 0 0 auto;
@@ -250,6 +257,27 @@ button {
 
 .folder-caret.open {
     transform: rotate(90deg);
+    color: var(--accent);
+}
+
+.folder-icon {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.folder-icon svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+}
+
+.folder-item.active .folder-icon,
+.folder-item.active .folder-caret {
     color: var(--accent);
 }
 

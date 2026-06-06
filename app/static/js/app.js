@@ -12,6 +12,7 @@ const overlay = document.getElementById('box-overlay');
 const form = document.getElementById('bookmark-form');
 const boxTitle = document.getElementById('box-title');
 const folderInput = document.getElementById('folder');
+const smartViewList = document.getElementById('smart-view-list');
 const folderList = document.getElementById('folder-list');
 const currentFolderTitle = document.getElementById('current-folder-title');
 const currentFolderSubtitle = document.getElementById('current-folder-subtitle');
@@ -49,6 +50,7 @@ const webdavFilenameInput = document.getElementById('webdav-filename');
 const API_BASE = 'api';
 const ALL_BOOKMARKS_VIEW = '__ALL__';
 const LAST_IMPORT_VIEW = '__LAST_IMPORT__';
+const UNCATEGORIZED_VIEW = '__UNCATEGORIZED__';
 let activeFolderSuggestionInput = null;
 
 function syncTopbarHeight() {
@@ -332,11 +334,21 @@ function closeLastImportView() {
 
 window.closeLastImportView = closeLastImportView;
 
+function isSmartView(value) {
+    return value === ALL_BOOKMARKS_VIEW ||
+        value === LAST_IMPORT_VIEW ||
+        value === UNCATEGORIZED_VIEW;
+}
+
 function isInCurrentFolder(bookmarkFolder) {
     const folder = String(bookmarkFolder || '').trim();
 
     if (selectedFolder === ALL_BOOKMARKS_VIEW) {
         return true;
+    }
+
+    if (selectedFolder === UNCATEGORIZED_VIEW) {
+        return folder.length === 0;
     }
 
     return folder === selectedFolder;
@@ -369,7 +381,7 @@ function getChildFolders() {
         return [];
     }
 
-    if (selectedFolder === LAST_IMPORT_VIEW || selectedFolder === ALL_BOOKMARKS_VIEW) {
+    if (isSmartView(selectedFolder)) {
         return [];
     }
 
@@ -421,6 +433,10 @@ function getFolderAllBookmarkCount(folderPath) {
         return bookmarks.filter(bookmark => lastImportedBookmarkIds.has(String(bookmark.id || ''))).length;
     }
 
+    if (folderPath === UNCATEGORIZED_VIEW) {
+        return bookmarks.filter(bookmark => !String(bookmark.folder || '').trim()).length;
+    }
+
     return bookmarks.filter(bookmark => {
         const folder = String(bookmark.folder || '').trim();
         return folder === folderPath || folder.startsWith(folderPath + ' / ');
@@ -449,7 +465,7 @@ async function fetchList() {
         pruneLastImportedBookmarks();
         refreshActiveFolderSuggestions();
 
-        if (selectedFolder !== ALL_BOOKMARKS_VIEW && selectedFolder !== LAST_IMPORT_VIEW) {
+        if (!isSmartView(selectedFolder)) {
             const selectedExists = bookmarks.some((bookmark) => {
                 const folder = String(bookmark.folder || '').trim();
                 return folder === selectedFolder || folder.startsWith(selectedFolder + ' / ');
@@ -520,23 +536,46 @@ function buildFolderTree() {
 function renderFolders() {
     const tree = buildFolderTree();
 
-    folderList.innerHTML = '';
+    if (smartViewList) {
+        smartViewList.innerHTML = '';
+        renderSmartViews();
+    }
 
-    folderList.appendChild(
-        createFolderTreeButton({
-            label: '全部书签',
-            count: bookmarks.length,
-            value: ALL_BOOKMARKS_VIEW,
-            level: 0,
-            hasChildren: false
-        })
-    );
+    folderList.innerHTML = '';
 
     const topFolders = Array.from(tree.children.values())
         .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
 
     for (const folder of topFolders) {
         renderFolderNode(folder, 0);
+    }
+}
+
+function renderSmartViews() {
+    const smartViews = [
+        {
+            label: '全部书签',
+            count: getFolderAllBookmarkCount(ALL_BOOKMARKS_VIEW),
+            value: ALL_BOOKMARKS_VIEW,
+            icon: 'all'
+        },
+        {
+            label: '未分类',
+            count: getFolderAllBookmarkCount(UNCATEGORIZED_VIEW),
+            value: UNCATEGORIZED_VIEW,
+            icon: 'uncategorized'
+        }
+    ];
+
+    for (const view of smartViews) {
+        smartViewList.appendChild(
+            createFolderTreeButton({
+                ...view,
+                level: 0,
+                hasChildren: false,
+                canManage: false
+            })
+        );
     }
 }
 
@@ -549,7 +588,8 @@ function renderFolderNode(node, level) {
             count: node.count,
             value: node.path,
             level,
-            hasChildren
+            hasChildren,
+            icon: 'folder'
         })
     );
 
@@ -565,22 +605,34 @@ function renderFolderNode(node, level) {
     }
 }
 
-function createFolderTreeButton({ label, count, value, level, hasChildren, canManage = null }) {
+function getFolderIcon(icon) {
+    const icons = {
+        all: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5v-11Zm2.5-.75A.75.75 0 0 0 5.75 6.5v11c0 .41.34.75.75.75h11c.41 0 .75-.34.75-.75v-11a.75.75 0 0 0-.75-.75h-11Zm2 3.25h7v1.5h-7V9Zm0 3.25h7v1.5h-7v-1.5Zm0 3.25h5v1.5h-5v-1.5Z"/></svg>',
+        uncategorized: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9.4L14.6 5H7Zm0 1.75h7l4.25 4.25V17a.25.25 0 0 1-.25.25H7A.25.25 0 0 1 6.75 17V7A.25.25 0 0 1 7 6.75Zm2 5.75h6v1.5H9v-1.5Z"/></svg>',
+        folder: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l1.8 2H18.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Zm2.5-.75a.75.75 0 0 0-.75.75v9c0 .41.34.75.75.75h13c.41 0 .75-.34.75-.75v-7a.75.75 0 0 0-.75-.75h-7.78l-1.8-2H5.5Z"/></svg>'
+    };
+
+    return icons[icon] || icons.folder;
+}
+
+function createFolderTreeButton({ label, count, value, level, hasChildren, canManage = null, icon = 'folder' }) {
     const button = document.createElement('button');
     button.className = `folder-item ${selectedFolder === value ? 'active' : ''}`;
     button.dataset.folder = value;
     button.style.setProperty('--level', level);
 
     const isExpanded = expandedFolders.has(value);
-    const showActions = canManage ?? (value !== ALL_BOOKMARKS_VIEW && value !== LAST_IMPORT_VIEW);
+    const showActions = canManage ?? !isSmartView(value);
 
+    button.classList.toggle('has-children', hasChildren);
     button.innerHTML = `
         <span class="folder-left">
             ${
                 hasChildren
                     ? `<span class="folder-caret ${isExpanded ? 'open' : ''}" data-action="toggle">›</span>`
-                    : `<span class="folder-caret-placeholder"></span>`
+                    : ''
             }
+            <span class="folder-icon">${getFolderIcon(icon)}</span>
             <span class="folder-name" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
         </span>
 
@@ -699,6 +751,8 @@ function renderCards() {
         ? '搜索结果'
         : selectedFolder === ALL_BOOKMARKS_VIEW
             ? '全部书签'
+            : selectedFolder === UNCATEGORIZED_VIEW
+            ? '未分类'
             : selectedFolder;
 
     currentFolderTitle.textContent = title;
@@ -706,6 +760,8 @@ function renderCards() {
         ? `本次导入新增 ${getFolderAllBookmarkCount(LAST_IMPORT_VIEW)} 个书签，当前显示 ${visible.length} 个`
         : isSearching
         ? `在全部书签中找到 ${visible.length} 个结果，共 ${bookmarks.length} 个书签`
+        : selectedFolder === UNCATEGORIZED_VIEW
+        ? `未归入目录的书签，当前显示 ${visible.length} 个，共 ${bookmarks.length} 个书签`
         : `${childFolders.length} 个子目录，${visible.length} 个书签，共 ${bookmarks.length} 个书签`;
 
     if (bulkExportButton) {
