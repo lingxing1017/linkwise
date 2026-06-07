@@ -827,8 +827,8 @@ function renderCards() {
             </div>
 
             <div class="bookmark-actions">
-                <button class="row-btn" onclick="event.stopPropagation(); handleRenameFolder('${escapeHtml(folder.path)}')">编辑</button>
-                <button class="row-btn danger" onclick="event.stopPropagation(); handleDeleteFolder('${escapeHtml(folder.path)}')">删除</button>
+                <button class="row-btn icon-btn" title="编辑目录" aria-label="编辑目录" onclick="event.stopPropagation(); handleRenameFolder('${escapeHtml(folder.path)}')">✎</button>
+                <button class="row-btn icon-btn danger" title="删除目录" aria-label="删除目录" onclick="event.stopPropagation(); handleDeleteFolder('${escapeHtml(folder.path)}')">×</button>
             </div>
         `;
 
@@ -906,8 +906,8 @@ function renderCards() {
             </div>
 
             <div class="bookmark-actions">
-                <button class="row-btn" onclick="editItem(event, '${escapeHtml(id)}')">编辑</button>
-                <button class="row-btn danger" onclick="removeItem(event, '${escapeHtml(id)}')">删除</button>
+                <button class="row-btn icon-btn" title="编辑书签" aria-label="编辑书签" onclick="editItem(event, '${escapeHtml(id)}')">✎</button>
+                <button class="row-btn icon-btn danger" title="删除书签" aria-label="删除书签" onclick="removeItem(event, '${escapeHtml(id)}')">×</button>
             </div>
         `;
 
