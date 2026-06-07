@@ -390,7 +390,17 @@ button {
     padding: 28px 34px 18px;
     background: var(--topbar-bg);
     backdrop-filter: blur(18px);
-    border-bottom: 1px solid var(--topbar-border);
+}
+
+.topbar::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -18px;
+    height: 18px;
+    pointer-events: none;
+    background: linear-gradient(to bottom, var(--topbar-bg), transparent);
 }
 
 .topbar h1 {
