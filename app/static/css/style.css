@@ -1488,7 +1488,13 @@ button {
 
     /* Mobile Bookmark Rows */
     .bookmark-row {
-        grid-template-columns: 24px 38px 1fr;
+        position: relative;
+        overflow: hidden;
+        grid-template-columns: var(--bookmark-row-columns);
+        grid-template-rows: auto auto;
+        align-items: center;
+        min-height: 72px;
+        padding: 10px 12px;
     }
 
     .bookmark-actions {
@@ -1497,7 +1503,27 @@ button {
     }
 
     .bookmark-folder {
-        max-width: 160px;
+        grid-column: 3;
+        grid-row: 2;
+        margin-top: 6px;
+        max-width: min(100%, 260px);
+    }
+
+    .bookmark-actions {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        z-index: 2;
+        justify-content: flex-end;
+        opacity: 1;
+        pointer-events: none;
+        transform: translate(calc(100% + 28px), -50%);
+        transition: transform 0.18s ease;
+    }
+
+    .bookmark-row.actions-open .bookmark-actions {
+        pointer-events: auto;
+        transform: translate(0, -50%);
     }
 
     /* Mobile Add Menu */
