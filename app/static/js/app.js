@@ -229,21 +229,17 @@ function updateBulkMoveBar() {
 }
 
 function updateBulkMiniBar() {
-    if (!bulkMiniBar || !bulkMoveBar) return;
+    if (!bulkMiniBar) return;
 
     const count = selectedBookmarkIds.size;
-
-    if (count === 0) {
-        setClassVisible(bulkMiniBar, 'show', false);
-        return;
-    }
-
-    const rect = bulkMoveBar.getBoundingClientRect();
-    const topbarHeight = topbar ? topbar.offsetHeight : 0;
-    const isFullBarVisible = rect.bottom > topbarHeight && rect.top < window.innerHeight;
-
-    setClassVisible(bulkMiniBar, 'show', !isFullBarVisible);
+    setClassVisible(bulkMiniBar, 'show', count > 0);
 }
+
+window.clearBookmarkSelection = function() {
+    selectedBookmarkIds.clear();
+    updateBulkMoveBar();
+    renderCards();
+};
 
 function pruneBookmarkSelection() {
     const existingIds = new Set(bookmarks.map(bookmark => String(bookmark.id || '')));

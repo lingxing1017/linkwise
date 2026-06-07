@@ -741,6 +741,26 @@ button {
     white-space: nowrap;
 }
 
+.bulk-mini-clear {
+    width: 34px;
+    height: 34px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.bulk-mini-clear:hover {
+    background: var(--panel-soft);
+    color: var(--text);
+}
+
 .bulk-mini-btn.danger {
     background: var(--danger-soft);
     color: var(--danger);
@@ -1378,15 +1398,34 @@ button {
     }
 
     .bulk-mini-bar {
-        right: 16px;
-        left: 16px;
+        right: auto;
+        left: 50%;
+        width: max-content;
+        max-width: calc(100vw - 32px);
         bottom: calc(16px + env(safe-area-inset-bottom));
-        justify-content: space-between;
-        transform: translateY(16px) scale(0.98);
+        gap: 8px;
+        justify-content: center;
+        padding: 7px;
+        transform: translateX(-50%) translateY(16px) scale(0.98);
     }
 
     .bulk-mini-bar.show {
-        transform: translateY(0) scale(1);
+        transform: translateX(-50%) translateY(0) scale(1);
+    }
+
+    .bulk-mini-count {
+        font-size: 12px;
+    }
+
+    .bulk-mini-btn {
+        min-width: 50px;
+        height: 34px;
+        padding: 0 11px;
+    }
+
+    .bulk-mini-clear {
+        width: 32px;
+        height: 32px;
     }
 
     /* Mobile Bookmark Rows */
