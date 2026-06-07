@@ -66,23 +66,24 @@
             </header>
 
             <section class="content-area">
-                <div class="bulk-move-bar" id="bulk-move-bar">
-                    <label class="bulk-select-all" title="全选当前列表">
-                        <input type="checkbox" id="bulk-select-all">
-                    </label>
+                <div class="bookmark-panel">
+                    <div class="bookmark-list-header" id="bookmark-list-header">
+                        <label class="bulk-select-all" title="全选当前列表">
+                            <input type="checkbox" id="bulk-select-all">
+                        </label>
 
-                    <div class="bulk-move-count">
-                        已选 <strong id="bulk-selected-count">0</strong> 个
+                        <div class="bookmark-header-title">标题</div>
+                        <div class="bookmark-header-folder">目录</div>
+                        <div class="bookmark-header-actions">操作</div>
+
+                        <div class="bulk-move-count" aria-live="polite">
+                            已选 <strong id="bulk-selected-count">0</strong> 个
+                        </div>
                     </div>
 
-                    <button type="button" class="bulk-move-btn" onclick="moveSelectedBookmarks()">移动</button>
-                    <button type="button" class="bulk-export-btn" id="bulk-export-btn" onclick="exportSelectedBookmarks()">导出</button>
-                    <button type="button" class="bulk-delete-btn" onclick="deleteSelectedBookmarks()">删除</button>
-                    <button type="button" class="bulk-finish-btn" id="bulk-finish-btn" onclick="closeLastImportView()" hidden>完成整理</button>
-                </div>
-
-                <div id="cards-wrapper" class="bookmark-list">
-                    <div class="state-text">正在加载书签...</div>
+                    <div id="cards-wrapper" class="bookmark-list">
+                        <div class="state-text">正在加载书签...</div>
+                    </div>
                 </div>
             </section>
         </main>

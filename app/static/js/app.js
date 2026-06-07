@@ -25,7 +25,7 @@ const sidebar = document.querySelector('.sidebar');
 const drawerScrim = document.getElementById('drawer-scrim');
 const floatingMenu = document.getElementById('floating-menu');
 const topbarMoreMenu = document.getElementById('topbar-more-menu');
-const bulkMoveBar = document.getElementById('bulk-move-bar');
+const bookmarkListHeader = document.getElementById('bookmark-list-header');
 const bulkSelectedCount = document.getElementById('bulk-selected-count');
 const bulkMiniBar = document.getElementById('bulk-mini-bar');
 const bulkMiniSelectedCount = document.getElementById('bulk-mini-selected-count');
@@ -193,8 +193,8 @@ function updateBulkMoveBar() {
         bulkMiniSelectedCount.textContent = count;
     }
 
-    if (bulkMoveBar) {
-        setClassVisible(bulkMoveBar, 'show', true);
+    if (bookmarkListHeader) {
+        setClassVisible(bookmarkListHeader, 'show', true);
     }
 
     if (bulkSelectAll) {
