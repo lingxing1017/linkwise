@@ -938,6 +938,9 @@ button {
 }
 
 .bookmark-folder {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
     justify-self: start;
     max-width: 100%;
     min-height: 20px;
