@@ -899,17 +899,15 @@ function renderCards() {
 
             <div class="bookmark-letter folder-letter">📁</div>
 
-            <div class="bookmark-main">
+            <div class="bookmark-text">
                 <div class="bookmark-title" title="${escapeHtml(folder.name)}">
                     ${escapeHtml(folder.name)}
                 </div>
 
-                <div class="bookmark-meta">
-                    <span class="bookmark-domain">${folder.count} 个书签</span>
-                    <span class="dot">•</span>
-                    <span class="bookmark-folder" title="${escapeHtml(folder.path)}">${escapeHtml(folder.path)}</span>
-                </div>
+                <div class="bookmark-domain">${folder.count} 个书签</div>
             </div>
+
+            <span class="bookmark-folder" title="${escapeHtml(folder.path)}">${escapeHtml(folder.path)}</span>
 
             <div class="bookmark-actions">
                 <button class="row-btn icon-btn" title="编辑目录" aria-label="编辑目录" onclick="event.stopPropagation(); handleRenameFolder('${escapeHtml(folder.path)}')">✎</button>
@@ -979,17 +977,15 @@ function renderCards() {
 
             <div class="bookmark-letter">${escapeHtml(firstChar)}</div>
 
-            <div class="bookmark-main">
+            <div class="bookmark-text">
                 <div class="bookmark-title" title="${escapeHtml(titleText)}">
                     ${escapeHtml(titleText)}
                 </div>
 
-                <div class="bookmark-meta">
-                    <span class="bookmark-domain" title="${escapeHtml(url)}">${escapeHtml(domain)}</span>
-                    <span class="dot">•</span>
-                    <span class="bookmark-folder" title="${escapeHtml(folder)}">${escapeHtml(folder)}</span>
-                </div>
+                <div class="bookmark-domain" title="${escapeHtml(url)}">${escapeHtml(domain)}</div>
             </div>
+
+            <span class="bookmark-folder" title="${escapeHtml(folder)}">${escapeHtml(folder)}</span>
 
             <div class="bookmark-actions">
                 <button class="row-btn icon-btn" title="编辑书签" aria-label="编辑书签" onclick="editItem(event, '${escapeHtml(id)}')">✎</button>
