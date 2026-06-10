@@ -495,7 +495,7 @@ button {
     right: 0;
     top: calc(100% + 10px);
     z-index: 30;
-    min-width: 148px;
+    min-width: 186px;
     padding: 6px;
     border: 1px solid var(--floating-border);
     border-radius: 14px;
@@ -535,6 +535,65 @@ button {
 .topbar-more-item:hover {
     background: var(--panel-soft);
     color: var(--accent);
+}
+
+.topbar-more-submenu-wrapper {
+    position: relative;
+}
+
+.topbar-more-submenu-trigger {
+    padding-right: 8px;
+}
+
+.topbar-more-value {
+    margin-left: auto;
+    color: var(--muted-2);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.topbar-more-arrow {
+    color: var(--muted-2);
+    font-size: 16px;
+    line-height: 1;
+}
+
+.topbar-more-submenu {
+    position: absolute;
+    top: 0;
+    right: calc(100% + 8px);
+    z-index: 31;
+    min-width: 118px;
+    padding: 6px;
+    border: 1px solid var(--floating-border);
+    border-radius: 14px;
+    background: var(--floating-bg);
+    box-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
+    backdrop-filter: blur(10px);
+    display: none;
+}
+
+.topbar-more-submenu-wrapper:hover .topbar-more-submenu,
+.topbar-more-submenu-wrapper.submenu-open .topbar-more-submenu {
+    display: block;
+}
+
+.density-option {
+    gap: 8px;
+}
+
+.density-check {
+    width: 14px;
+    color: var(--accent);
+    font-weight: 850;
+}
+
+.density-option.active {
+    color: var(--accent);
+}
+
+.density-option.active .density-check::before {
+    content: "✓";
 }
 
 .content-area {
@@ -1033,6 +1092,87 @@ button {
     color: var(--accent);
 }
 
+body[data-density="compact"] .bookmark-panel {
+    overflow: hidden;
+    border: 1px solid var(--row-border);
+    border-radius: 18px;
+    background: var(--panel);
+    background: color-mix(in srgb, var(--panel) 84%, transparent);
+    box-shadow: 0 18px 46px rgba(15, 23, 42, 0.07);
+}
+
+body[data-density="compact"] .bookmark-list-header {
+    gap: 10px;
+    margin-bottom: 0;
+    border: 0;
+    border-bottom: 1px solid var(--toolbar-border);
+    border-radius: 0;
+    background: var(--floating-bg);
+    background: color-mix(in srgb, var(--floating-bg) 88%, transparent);
+    box-shadow: none;
+}
+
+body[data-density="compact"] .import-group-divider {
+    margin: 0;
+    padding: 9px 14px;
+    border: 0;
+    border-bottom: 1px solid var(--row-border);
+    border-radius: 0;
+}
+
+body[data-density="compact"] .bookmark-list {
+    gap: 0;
+}
+
+body[data-density="compact"] .bookmark-row {
+    gap: 10px;
+    min-height: 54px;
+    padding: 8px 14px;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--row-border);
+    border-radius: 0;
+    box-shadow: none;
+    transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+body[data-density="compact"] .bookmark-row:last-child {
+    border-bottom: 0;
+}
+
+body[data-density="compact"] .bookmark-row:hover {
+    transform: none;
+    background: color-mix(in srgb, var(--panel-soft) 72%, transparent);
+    box-shadow: none;
+}
+
+body[data-density="compact"] .bookmark-select,
+body[data-density="compact"] .bookmark-select-spacer {
+    width: 22px;
+    height: 22px;
+}
+
+body[data-density="compact"] .bookmark-letter {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    font-size: 14px;
+}
+
+body[data-density="compact"] .bookmark-title {
+    font-size: 14px;
+}
+
+body[data-density="compact"] .state-text {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+
+body[data-density="compact"] .folder-row {
+    border-style: solid;
+}
+
 /* 12. Dialogs */
 .dialog-overlay {
     position: fixed;
@@ -1451,6 +1591,29 @@ button {
 
     .topbar-more-btn {
         width: 42px;
+    }
+
+    .topbar-more-panel {
+        min-width: 196px;
+    }
+
+    .topbar-more-submenu {
+        position: static;
+        min-width: 0;
+        margin: 4px 0 6px 26px;
+        padding: 4px;
+        border-radius: 10px;
+        box-shadow: none;
+        background: var(--panel-soft);
+        backdrop-filter: none;
+    }
+
+    .topbar-more-submenu-wrapper:hover .topbar-more-submenu {
+        display: none;
+    }
+
+    .topbar-more-submenu-wrapper.submenu-open .topbar-more-submenu {
+        display: block;
     }
 
     /* Mobile Content And Bulk Actions */

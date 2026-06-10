@@ -54,6 +54,28 @@
                         </button>
 
                         <div class="topbar-more-panel">
+                            <div class="topbar-more-submenu-wrapper" id="density-menu">
+                                <button type="button" class="topbar-more-item topbar-more-submenu-trigger" onclick="toggleDensitySubmenu(event)">
+                                    <svg viewBox="0 0 24 24">
+                                        <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h10v2H4v-2z"/>
+                                    </svg>
+                                    <span>显示密度</span>
+                                    <span class="topbar-more-value" id="density-current-label">舒适</span>
+                                    <span class="topbar-more-arrow">›</span>
+                                </button>
+
+                                <div class="topbar-more-submenu">
+                                    <button type="button" class="topbar-more-item density-option" data-density-option="comfortable" onclick="setBookmarkDensity('comfortable', event)">
+                                        <span class="density-check" aria-hidden="true"></span>
+                                        <span>舒适</span>
+                                    </button>
+                                    <button type="button" class="topbar-more-item density-option" data-density-option="compact" onclick="setBookmarkDensity('compact', event)">
+                                        <span class="density-check" aria-hidden="true"></span>
+                                        <span>紧凑</span>
+                                    </button>
+                                </div>
+                            </div>
+
                             <button type="button" class="topbar-more-item" onclick="exportAllBookmarks()">
                                 <svg viewBox="0 0 24 24">
                                     <path d="M5 20h14v-2H5v2zm7-18v10.17l3.59-3.58L17 10l-5 5-5-5 1.41-1.41L11 12.17V2h1z"/>

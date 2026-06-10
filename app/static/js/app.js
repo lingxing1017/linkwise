@@ -25,6 +25,8 @@ const sidebar = document.querySelector('.sidebar');
 const drawerScrim = document.getElementById('drawer-scrim');
 const floatingMenu = document.getElementById('floating-menu');
 const topbarMoreMenu = document.getElementById('topbar-more-menu');
+const densityMenu = document.getElementById('density-menu');
+const densityCurrentLabel = document.getElementById('density-current-label');
 const bookmarkListHeader = document.getElementById('bookmark-list-header');
 const bulkSelectedCount = document.getElementById('bulk-selected-count');
 const bulkMiniBar = document.getElementById('bulk-mini-bar');
@@ -51,6 +53,12 @@ const API_BASE = 'api';
 const ALL_BOOKMARKS_VIEW = '__ALL__';
 const LAST_IMPORT_VIEW = '__LAST_IMPORT__';
 const UNCATEGORIZED_VIEW = '__UNCATEGORIZED__';
+const BOOKMARK_DENSITY_KEY = 'linkwise-bookmark-density';
+const BOOKMARK_DENSITIES = new Set(['comfortable', 'compact']);
+const BOOKMARK_DENSITY_LABELS = {
+    comfortable: '舒适',
+    compact: '紧凑'
+};
 let activeFolderSuggestionInput = null;
 
 function syncTopbarHeight() {
@@ -58,6 +66,58 @@ function syncTopbarHeight() {
         document.documentElement.style.setProperty('--topbar-height', `${topbar.offsetHeight}px`);
     }
 }
+
+function getStoredBookmarkDensity() {
+    try {
+        const stored = localStorage.getItem(BOOKMARK_DENSITY_KEY);
+        return BOOKMARK_DENSITIES.has(stored) ? stored : 'comfortable';
+    } catch (_) {
+        return 'comfortable';
+    }
+}
+
+function updateDensityMenu(density) {
+    if (densityCurrentLabel) {
+        densityCurrentLabel.textContent = BOOKMARK_DENSITY_LABELS[density] || BOOKMARK_DENSITY_LABELS.comfortable;
+    }
+
+    document.querySelectorAll('[data-density-option]').forEach((option) => {
+        const isActive = option.dataset.densityOption === density;
+        option.classList.toggle('active', isActive);
+        option.setAttribute('aria-checked', String(isActive));
+    });
+}
+
+function applyBookmarkDensity(density) {
+    const normalized = BOOKMARK_DENSITIES.has(density) ? density : 'comfortable';
+    document.body.dataset.density = normalized;
+    updateDensityMenu(normalized);
+}
+
+window.setBookmarkDensity = function(density, event) {
+    if (event) {
+        event.stopPropagation();
+    }
+
+    const normalized = BOOKMARK_DENSITIES.has(density) ? density : 'comfortable';
+
+    try {
+        localStorage.setItem(BOOKMARK_DENSITY_KEY, normalized);
+    } catch (_) {
+        // Ignore storage failures; the current session can still switch density.
+    }
+
+    applyBookmarkDensity(normalized);
+    closeTopbarMoreMenu();
+};
+
+window.toggleDensitySubmenu = function(event) {
+    event.stopPropagation();
+
+    if (densityMenu) {
+        densityMenu.classList.toggle('submenu-open');
+    }
+};
 
 function getFolderSuggestions() {
     return Array.from(
@@ -1744,6 +1804,10 @@ function closeTopbarMoreMenu() {
     if (topbarMoreMenu) {
         topbarMoreMenu.classList.remove('open');
     }
+
+    if (densityMenu) {
+        densityMenu.classList.remove('submenu-open');
+    }
 }
 
 async function loadWebdavConfig() {
@@ -2030,5 +2094,6 @@ form.addEventListener('submit', async function(event) {
 
 search.addEventListener('input', renderCards);
 
+applyBookmarkDensity(getStoredBookmarkDensity());
 syncTopbarHeight();
 fetchList();
