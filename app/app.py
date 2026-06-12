@@ -9,10 +9,10 @@ from urllib.parse import urlparse
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 
-DB_DIR = 'data'
+DB_DIR = os.environ.get('LINKWISE_DB_DIR', 'data')
 DB_FILE = os.path.join(DB_DIR, 'bookmarks.db')
 DEFAULT_WEBDAV_FILENAME = 'linkwise-bookmarks.html'
-DEFAULT_SECRET_FILE = '/run/secrets/linkwise_secret_key'
+DEFAULT_SECRET_FILE = os.environ.get('LINKWISE_SECRET_FILE', '/run/secrets/linkwise_secret_key')
 PASSWORD_AAD = b'linkwise-webdav-password-v1'
 
 
