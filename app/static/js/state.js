@@ -3,6 +3,7 @@ let selectedFolder = '__ALL__';
 let expandedFolders = new Set();
 let selectedBookmarkIds = new Set();
 let lastImportedBookmarkIds = new Set();
+let folderOrders = new Map();
 let pendingDeleteFolder = '';
 let pendingRenameFolder = '';
 

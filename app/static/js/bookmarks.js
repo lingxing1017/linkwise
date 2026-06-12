@@ -116,7 +116,58 @@ function getChildFolders() {
         });
     }
 
-    return Array.from(childMap.values()).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+    return Array.from(childMap.values()).sort((a, b) => compareFolders(selectedFolder, a, b));
+}
+
+function setFolderOrders(orderRows) {
+    folderOrders = new Map();
+
+    for (const row of orderRows) {
+        const parentFolder = normalizeFolderPath(row.parent_folder || '');
+        const folderName = String(row.folder_name || '').trim();
+
+        if (!folderName) {
+            continue;
+        }
+
+        if (!folderOrders.has(parentFolder)) {
+            folderOrders.set(parentFolder, new Map());
+        }
+
+        folderOrders.get(parentFolder).set(folderName, Number(row.sort_order) || 0);
+    }
+}
+
+function getFolderOrder(parentFolder, folderName) {
+    const parentOrders = folderOrders.get(normalizeFolderPath(parentFolder));
+
+    if (!parentOrders || !parentOrders.has(folderName)) {
+        return Number.POSITIVE_INFINITY;
+    }
+
+    return parentOrders.get(folderName);
+}
+
+function compareFolders(parentFolder, a, b) {
+    const orderA = getFolderOrder(parentFolder, a.name);
+    const orderB = getFolderOrder(parentFolder, b.name);
+
+    if (orderA !== orderB) {
+        return orderA - orderB;
+    }
+
+    return a.name.localeCompare(b.name, 'zh-CN');
+}
+
+function compareBookmarks(a, b) {
+    const orderA = Number.isFinite(Number(a.sort_order)) ? Number(a.sort_order) : Number.POSITIVE_INFINITY;
+    const orderB = Number.isFinite(Number(b.sort_order)) ? Number(b.sort_order) : Number.POSITIVE_INFINITY;
+
+    if (orderA !== orderB) {
+        return orderA - orderB;
+    }
+
+    return String(a.title || '').localeCompare(String(b.title || ''), 'zh-CN');
 }
 
 function getFolderAllBookmarkCount(folderPath) {
@@ -148,14 +199,19 @@ function ensureParentFoldersExpanded(folderPath) {
 
 async function fetchList() {
     try {
-        const res = await fetch(`${API_BASE}/bookmarks`);
-        const data = await parseApiJson(res, '获取书签失败');
+        const [bookmarkRes, folderOrderRes] = await Promise.all([
+            fetch(`${API_BASE}/bookmarks`),
+            fetch(`${API_BASE}/folder-orders`)
+        ]);
+        const data = await parseApiJson(bookmarkRes, '获取书签失败');
+        const orderData = await parseApiJson(folderOrderRes, '获取目录排序失败');
 
-        if (!Array.isArray(data)) {
+        if (!Array.isArray(data) || !Array.isArray(orderData)) {
             throw new Error('INVALID_BOOKMARKS_RESPONSE');
         }
 
         bookmarks = data;
+        setFolderOrders(orderData);
         pruneBookmarkSelection();
         pruneLastImportedBookmarks();
         refreshActiveFolderSuggestions();
@@ -239,7 +295,7 @@ function renderFolders() {
     folderList.innerHTML = '';
 
     const topFolders = Array.from(tree.children.values())
-        .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+        .sort((a, b) => compareFolders('', a, b));
 
     for (const folder of topFolders) {
         renderFolderNode(folder, 0);
@@ -276,12 +332,14 @@ function renderSmartViews() {
 
 function renderFolderNode(node, level) {
     const hasChildren = node.children.size > 0;
+    const parentFolder = getParentFolderPath(node.path);
 
     folderList.appendChild(
         createFolderTreeButton({
             label: node.name,
             count: node.count,
             value: node.path,
+            parentFolder,
             level,
             hasChildren,
             icon: 'folder'
@@ -293,7 +351,7 @@ function renderFolderNode(node, level) {
     }
 
     const children = Array.from(node.children.values())
-        .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+        .sort((a, b) => compareFolders(node.path, a, b));
 
     for (const child of children) {
         renderFolderNode(child, level + 1);
@@ -310,14 +368,23 @@ function getFolderIcon(icon) {
     return icons[icon] || icons.folder;
 }
 
-function createFolderTreeButton({ label, count, value, level, hasChildren, canManage = null, icon = 'folder' }) {
+function createFolderTreeButton({ label, count, value, parentFolder = '', level, hasChildren, canManage = null, icon = 'folder' }) {
     const button = document.createElement('button');
     button.className = `folder-item ${selectedFolder === value ? 'active' : ''}`;
     button.dataset.folder = value;
+    button.dataset.parentFolder = parentFolder;
+    button.dataset.folderName = label;
     button.style.setProperty('--level', level);
 
     const isExpanded = expandedFolders.has(value);
     const showActions = canManage ?? !isSmartView(value);
+    const canSort = !isSmartView(value);
+
+    if (canSort) {
+        button.draggable = true;
+        button.classList.add('sortable');
+        setupFolderTreeDrag(button);
+    }
 
     button.classList.toggle('has-children', hasChildren);
     button.innerHTML = `
@@ -392,6 +459,231 @@ function createFolderTreeButton({ label, count, value, level, hasChildren, canMa
     });
 
     return button;
+}
+
+function canSortContentRows() {
+    return !hasSearchKeyword() &&
+        selectedFolder !== ALL_BOOKMARKS_VIEW &&
+        selectedFolder !== LAST_IMPORT_VIEW;
+}
+
+function setupFolderTreeDrag(button) {
+    button.addEventListener('dragstart', (event) => {
+        if (event.target.closest('.folder-actions') || event.target.closest('[data-action="toggle"]')) {
+            event.preventDefault();
+            return;
+        }
+
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', button.dataset.folder || '');
+        button.classList.add('dragging');
+    });
+
+    button.addEventListener('dragend', () => {
+        button.classList.remove('dragging');
+        clearSortDropTargets();
+    });
+
+    button.addEventListener('dragover', (event) => {
+        const dragging = folderList.querySelector('.folder-item.dragging');
+
+        if (!dragging || dragging === button || dragging.dataset.parentFolder !== button.dataset.parentFolder) {
+            return;
+        }
+
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        markSortDropTarget(button, event);
+    });
+
+    button.addEventListener('dragleave', () => {
+        button.classList.remove('drop-before', 'drop-after');
+    });
+
+    button.addEventListener('drop', async (event) => {
+        const dragging = folderList.querySelector('.folder-item.dragging');
+
+        if (!dragging || dragging === button || dragging.dataset.parentFolder !== button.dataset.parentFolder) {
+            return;
+        }
+
+        event.preventDefault();
+        await reorderFolderTreeAfterDrop(dragging, button, event);
+    });
+}
+
+function setupContentRowDrag(row) {
+    row.draggable = true;
+    row.classList.add('sortable');
+
+    row.addEventListener('dragstart', (event) => {
+        if (
+            event.target.closest('.bookmark-actions') ||
+            event.target.closest('.bookmark-select') ||
+            event.target.closest('button') ||
+            event.target.closest('input')
+        ) {
+            event.preventDefault();
+            return;
+        }
+
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', row.dataset.sortId || '');
+        row.classList.add('dragging');
+    });
+
+    row.addEventListener('dragend', () => {
+        row.classList.remove('dragging');
+        clearSortDropTargets();
+    });
+
+    row.addEventListener('dragover', (event) => {
+        const dragging = wrapper.querySelector('.bookmark-row.dragging');
+
+        if (!dragging || dragging === row || dragging.dataset.sortType !== row.dataset.sortType) {
+            return;
+        }
+
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        markSortDropTarget(row, event);
+    });
+
+    row.addEventListener('dragleave', () => {
+        row.classList.remove('drop-before', 'drop-after');
+    });
+
+    row.addEventListener('drop', async (event) => {
+        const dragging = wrapper.querySelector('.bookmark-row.dragging');
+
+        if (!dragging || dragging === row || dragging.dataset.sortType !== row.dataset.sortType) {
+            return;
+        }
+
+        event.preventDefault();
+        await reorderContentRowsAfterDrop(dragging, row, event);
+    });
+}
+
+function markSortDropTarget(target, event) {
+    const rect = target.getBoundingClientRect();
+    const placeAfter = event.clientY > rect.top + rect.height / 2;
+
+    clearSortDropTargets();
+    target.classList.add(placeAfter ? 'drop-after' : 'drop-before');
+}
+
+function clearSortDropTargets() {
+    document.querySelectorAll('.drop-before, .drop-after').forEach((element) => {
+        element.classList.remove('drop-before', 'drop-after');
+    });
+}
+
+function reorderItems(items, draggedItem, targetItem, event) {
+    const nextItems = items.filter(item => item !== draggedItem);
+    const targetIndex = nextItems.indexOf(targetItem);
+    const rect = targetItem.getBoundingClientRect();
+    const insertAfter = event.clientY > rect.top + rect.height / 2;
+
+    nextItems.splice(targetIndex + (insertAfter ? 1 : 0), 0, draggedItem);
+    return nextItems;
+}
+
+async function reorderFolderTreeAfterDrop(dragging, target, event) {
+    const parentFolder = dragging.dataset.parentFolder || '';
+    const siblings = Array.from(folderList.querySelectorAll('.folder-item.sortable'))
+        .filter(item => item.dataset.parentFolder === parentFolder);
+    const ordered = reorderItems(siblings, dragging, target, event);
+    const folders = ordered.map(item => item.dataset.folderName).filter(Boolean);
+
+    await saveFolderOrder(parentFolder, folders);
+}
+
+async function reorderContentRowsAfterDrop(dragging, target, event) {
+    const type = dragging.dataset.sortType;
+    const siblings = Array.from(wrapper.querySelectorAll(`.bookmark-row[data-sort-type="${type}"]`));
+    const ordered = reorderItems(siblings, dragging, target, event);
+
+    if (type === 'folder') {
+        await saveFolderOrder(
+            selectedFolder,
+            ordered.map(item => item.dataset.folderName).filter(Boolean)
+        );
+        return;
+    }
+
+    await saveBookmarkOrder(
+        selectedFolder === UNCATEGORIZED_VIEW ? '' : selectedFolder,
+        ordered.map(item => item.dataset.bookmarkId).filter(Boolean)
+    );
+}
+
+async function saveFolderOrder(parentFolder, folders) {
+    try {
+        const res = await fetch(`${API_BASE}/folders/reorder`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                parent_folder: parentFolder,
+                folders
+            })
+        });
+        const result = await parseApiJson(res, '目录排序失败');
+
+        if (!res.ok || result.status !== 'success') {
+            await showMessage(result.message || '目录排序失败', '目录排序失败');
+            return;
+        }
+
+        if (!folderOrders.has(parentFolder)) {
+            folderOrders.set(parentFolder, new Map());
+        }
+
+        folders.forEach((name, index) => folderOrders.get(parentFolder).set(name, index));
+        renderFolders();
+        renderCards();
+    } catch (err) {
+        console.error('目录排序失败:', err);
+        await showMessage('目录排序失败，请稍后重试', '目录排序失败');
+        await fetchList();
+    }
+}
+
+async function saveBookmarkOrder(folder, ids) {
+    try {
+        const res = await fetch(`${API_BASE}/bookmarks/reorder`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                folder,
+                ids
+            })
+        });
+        const result = await parseApiJson(res, '书签排序失败');
+
+        if (!res.ok || result.status !== 'success') {
+            await showMessage(result.message || '书签排序失败', '书签排序失败');
+            return;
+        }
+
+        ids.forEach((id, index) => {
+            const bookmark = bookmarks.find(item => String(item.id || '') === id);
+
+            if (bookmark) {
+                bookmark.sort_order = index;
+            }
+        });
+
+        renderCards();
+    } catch (err) {
+        console.error('书签排序失败:', err);
+        await showMessage('书签排序失败，请稍后重试', '书签排序失败');
+        await fetchList();
+    }
 }
 
 function createImportGroupDivider(folder) {
@@ -495,6 +787,9 @@ function renderCards() {
 
         const row = document.createElement('div');
         row.className = `bookmark-row folder-row ${selectedInFolderCount > 0 ? 'selected' : ''}`;
+        row.dataset.sortType = 'folder';
+        row.dataset.sortId = folder.path;
+        row.dataset.folderName = folder.name;
 
         row.addEventListener('click', (event) => {
             if (event.target.closest('.bookmark-actions') || event.target.closest('.bookmark-select')) return;
@@ -532,6 +827,10 @@ function renderCards() {
         wrapper.appendChild(row);
         setupSwipeActions(row);
 
+        if (canSortContentRows()) {
+            setupContentRowDrag(row);
+        }
+
         const checkbox = row.querySelector('.bookmark-select input');
         if (checkbox) {
             checkbox.indeterminate = isFolderPartSelected;
@@ -558,7 +857,7 @@ function renderCards() {
     const orderedVisible = isLastImportView
         ? [...visible].sort((a, b) =>
             normalizeFolder(a.folder).localeCompare(normalizeFolder(b.folder), 'zh-CN'))
-        : visible;
+        : [...visible].sort(compareBookmarks);
 
     let lastGroupFolder = null;
 
@@ -578,6 +877,9 @@ function renderCards() {
 
         const row = document.createElement('div');
         row.className = `bookmark-row ${isSelected ? 'selected' : ''}`;
+        row.dataset.sortType = 'bookmark';
+        row.dataset.sortId = id;
+        row.dataset.bookmarkId = id;
 
         row.addEventListener('click', (event) => {
             if (event.target.closest('.bookmark-actions') || event.target.closest('.bookmark-select')) return;
@@ -609,6 +911,10 @@ function renderCards() {
 
         wrapper.appendChild(row);
         setupSwipeActions(row);
+
+        if (canSortContentRows()) {
+            setupContentRowDrag(row);
+        }
 
         const checkbox = row.querySelector('.bookmark-select input');
         if (checkbox) {

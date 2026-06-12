@@ -234,6 +234,53 @@ button {
     color: var(--accent);
 }
 
+.folder-item.sortable,
+.bookmark-row.sortable {
+    cursor: grab;
+}
+
+.folder-item.sortable:active,
+.bookmark-row.sortable:active {
+    cursor: grabbing;
+}
+
+.folder-item.dragging,
+.bookmark-row.dragging {
+    opacity: 0.48;
+}
+
+.folder-item.drop-before,
+.folder-item.drop-after,
+.bookmark-row.drop-before,
+.bookmark-row.drop-after {
+    position: relative;
+}
+
+.folder-item.drop-before::before,
+.folder-item.drop-after::after,
+.bookmark-row.drop-before::before,
+.bookmark-row.drop-after::after {
+    content: "";
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--focus-ring);
+    pointer-events: none;
+}
+
+.folder-item.drop-before::before,
+.bookmark-row.drop-before::before {
+    top: -7px;
+}
+
+.folder-item.drop-after::after,
+.bookmark-row.drop-after::after {
+    bottom: -7px;
+}
+
 .folder-left {
     min-width: 0;
     display: flex;
