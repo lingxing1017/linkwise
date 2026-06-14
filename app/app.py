@@ -550,7 +550,7 @@ def index():
 @app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({
-        'status': 'ok',
+        'status': 'success',
         'app': 'linkwise',
         'version': APP_VERSION
     })
@@ -686,7 +686,7 @@ def save_bookmark():
 
             if duplicate:
                 return jsonify({
-                    'status': 'duplicate',
+                    'status': 'error',
                     'error': 'duplicate_url',
                     'message': '这个 URL 已存在',
                     'bookmark': {

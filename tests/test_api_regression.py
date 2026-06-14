@@ -26,7 +26,7 @@ def test_health_check_returns_ok(client, app_module):
 
     assert response.status_code == 200
     assert result == {
-        "status": "ok",
+        "status": "success",
         "app": "linkwise",
         "version": app_module.APP_VERSION,
     }
@@ -75,7 +75,7 @@ def test_duplicate_url_blocks_new_bookmark_but_allows_edit(client):
     edit_original = post_bookmark(client, id="original", title="Updated", url="example.com")
 
     assert duplicate.status_code == 409
-    assert duplicate.get_json()["status"] == "duplicate"
+    assert duplicate.get_json()["status"] == "error"
     assert duplicate.get_json()["error"] == "duplicate_url"
     assert duplicate.get_json()["bookmark"]["id"] == "original"
     assert edit_original.status_code == 200

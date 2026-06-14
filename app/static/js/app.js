@@ -162,7 +162,7 @@ form.addEventListener('submit', async function(event) {
 
         const result = await parseApiJson(res, '保存失败');
 
-        if (res.status === 409 && result.status === 'duplicate') {
+        if (res.status === 409 && result.error === 'duplicate_url') {
             const existing = result.bookmark;
             const shouldEdit = await showConfirm('这个 URL 已存在，要编辑原书签吗？', {
                 title: '书签已存在',
