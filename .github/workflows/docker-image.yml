@@ -16,10 +16,10 @@ jobs:
         run: echo "ver=$(date '+%Y.%m.%d')" >> "$GITHUB_OUTPUT"
 
       - name: set up qemu
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: set up docker buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: create output directory
         run: mkdir -p output
@@ -33,7 +33,7 @@ jobs:
             .
 
       - name: upload image tar
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linkwise-${{ steps.version.outputs.ver }}
           path: output/linkwise-${{ steps.version.outputs.ver }}.tar
