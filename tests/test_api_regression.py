@@ -59,8 +59,12 @@ def test_create_bookmark_rejects_invalid_input(client):
     invalid_url = post_bookmark(client, id="b2", url="javascript:alert(1)")
 
     assert missing_title.status_code == 400
+    assert missing_title.get_json()["status"] == "error"
+    assert missing_title.get_json()["error"] == "missing_title"
     assert missing_title.get_json()["message"] == "标题不能为空"
     assert invalid_url.status_code == 400
+    assert invalid_url.get_json()["status"] == "error"
+    assert invalid_url.get_json()["error"] == "invalid_url"
     assert invalid_url.get_json()["message"] == "URL 无效"
 
 
@@ -72,6 +76,7 @@ def test_duplicate_url_blocks_new_bookmark_but_allows_edit(client):
 
     assert duplicate.status_code == 409
     assert duplicate.get_json()["status"] == "duplicate"
+    assert duplicate.get_json()["error"] == "duplicate_url"
     assert duplicate.get_json()["bookmark"]["id"] == "original"
     assert edit_original.status_code == 200
     assert bookmark_titles(client) == ["Updated"]

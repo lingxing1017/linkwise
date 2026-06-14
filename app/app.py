@@ -660,10 +660,18 @@ def save_bookmark():
         folder = normalize_folder_path(data.get('folder'))
 
         if not title:
-            return jsonify({'status': 'error', 'message': '标题不能为空'}), 400
+            return jsonify({
+                'status': 'error',
+                'error': 'missing_title',
+                'message': '标题不能为空'
+            }), 400
 
         if not is_valid_url(url):
-            return jsonify({'status': 'error', 'message': 'URL 无效'}), 400
+            return jsonify({
+                'status': 'error',
+                'error': 'invalid_url',
+                'message': 'URL 无效'
+            }), 400
 
         with sqlite3.connect(DB_FILE) as conn:
             duplicate = conn.execute(
@@ -679,6 +687,7 @@ def save_bookmark():
             if duplicate:
                 return jsonify({
                     'status': 'duplicate',
+                    'error': 'duplicate_url',
                     'message': '这个 URL 已存在',
                     'bookmark': {
                         'id': duplicate[0],
