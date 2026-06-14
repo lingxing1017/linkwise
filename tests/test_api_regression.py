@@ -1,5 +1,7 @@
 import sqlite3
 
+import pytest
+
 
 def bookmark_payload(**overrides):
     payload = {
@@ -54,18 +56,51 @@ def test_create_bookmark_normalizes_url_and_folder(client):
     assert {"parent_folder": "Dev", "folder_name": "Python", "sort_order": 0} in folder_orders
 
 
-def test_create_bookmark_rejects_invalid_input(client):
+@pytest.mark.parametrize(
+    ("raw_url", "normalized_url"),
+    [
+        ("example.com:8080/path", "https://example.com:8080/path"),
+        ("localhost:3000", "https://localhost:3000"),
+        ("https://user:pass@example.com", "https://user:pass@example.com"),
+    ],
+)
+def test_create_bookmark_allows_port_and_userinfo_urls(client, raw_url, normalized_url):
+    response = post_bookmark(client, url=raw_url)
+
+    assert response.status_code == 200
+    assert response.get_json()["url"] == normalized_url
+
+
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "javascript:alert(1)",
+        "CHROME://settings",
+        "chrome-extension://abcdef/options.html",
+        "moz-extension://abcdef/sidebar.html",
+        "edge://favorites",
+        "file:///Users/example/bookmarks.html",
+        "view-source:https://example.com",
+        "example.com:abc/path",
+        "https://example.com:abc",
+    ],
+)
+def test_create_bookmark_rejects_internal_url_schemes(client, bad_url):
+    response = post_bookmark(client, url=bad_url)
+
+    assert response.status_code == 400
+    assert response.get_json()["status"] == "error"
+    assert response.get_json()["error"] == "invalid_url"
+    assert response.get_json()["message"] == "URL 无效"
+
+
+def test_create_bookmark_rejects_missing_title(client):
     missing_title = post_bookmark(client, title=" ")
-    invalid_url = post_bookmark(client, id="b2", url="javascript:alert(1)")
 
     assert missing_title.status_code == 400
     assert missing_title.get_json()["status"] == "error"
     assert missing_title.get_json()["error"] == "missing_title"
     assert missing_title.get_json()["message"] == "标题不能为空"
-    assert invalid_url.status_code == 400
-    assert invalid_url.get_json()["status"] == "error"
-    assert invalid_url.get_json()["error"] == "invalid_url"
-    assert invalid_url.get_json()["message"] == "URL 无效"
 
 
 def test_duplicate_url_blocks_new_bookmark_but_allows_edit(client):

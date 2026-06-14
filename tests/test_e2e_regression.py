@@ -109,6 +109,9 @@ def test_import_bookmarks_html_shows_last_import_view(page, live_server, tmp_pat
             <DL><p>
                 <DT><A HREF="https://python.org">Python</A>
                 <DT><A HREF="javascript:alert(1)">Ignored</A>
+                <DT><A HREF="chrome://settings">Chrome Settings</A>
+                <DT><A HREF="moz-extension://abcdef/sidebar.html">Firefox Extension</A>
+                <DT><A HREF="view-source:https://example.test">Page Source</A>
             </DL><p>
             <DT><A HREF="https://uncategorized.test">Loose</A>
         </DL><p>
@@ -133,6 +136,9 @@ def test_import_bookmarks_html_shows_last_import_view(page, live_server, tmp_pat
     assert bookmark_row(page, "Python").count() == 1
     assert bookmark_row(page, "Loose").count() == 1
     assert bookmark_row(page, "Ignored").count() == 0
+    assert bookmark_row(page, "Chrome Settings").count() == 0
+    assert bookmark_row(page, "Firefox Extension").count() == 0
+    assert bookmark_row(page, "Page Source").count() == 0
 
 
 def test_mobile_folder_drawer_opens_and_closes(page, live_server):

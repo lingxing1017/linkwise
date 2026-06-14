@@ -122,11 +122,12 @@ function parseBookmarksHtml(htmlContent) {
     }
 
     function isIgnoredUrl(url) {
-        return (
-            !url ||
-            url.startsWith('about:') ||
-            url.startsWith('place:') ||
-            url.startsWith('javascript:')
+        const normalized = String(url || '').trim().toLowerCase();
+
+        return !normalized || (
+            normalized.includes('://') &&
+            !normalized.startsWith('http://') &&
+            !normalized.startsWith('https://')
         );
     }
 

@@ -68,21 +68,32 @@ def normalize_url(url):
     if not url:
         return ''
 
-    if url.startswith(('http://', 'https://')):
-        return url
+    lowered = url.lower()
 
-    if url.startswith(('chrome://', 'edge://', 'about:', 'javascript:', 'place:')):
+    if lowered.startswith(('http://', 'https://')):
+        candidate = url
+    elif '://' in url:
         return ''
+    else:
+        candidate = 'https://' + url
 
-    # 手动添加 google.com 这种，也自动补 https://
-    return 'https://' + url
+    return candidate if is_valid_url(candidate) else ''
 
 
 def is_valid_url(url):
     try:
         parsed = urlparse(url)
-        return parsed.scheme in ('http', 'https') and bool(parsed.netloc)
-    except Exception:
+
+        if parsed.scheme not in ('http', 'https'):
+            return False
+
+        if not parsed.netloc or not parsed.hostname:
+            return False
+
+        parsed.port
+
+        return True
+    except ValueError:
         return False
 
 
