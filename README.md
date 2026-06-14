@@ -62,9 +62,6 @@ docker compose up -d
 也可以不使用 Compose，直接运行容器：
 
 ```bash
-mkdir -p data secrets
-openssl rand -hex 32 > secrets/linkwise_secret_key
-
 docker run -d \
   --name linkwise-app \
   -p 7500:7500 \
