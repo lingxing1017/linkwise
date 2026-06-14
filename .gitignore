@@ -11,3 +11,6 @@ __pycache__/
 data/
 app/data/
 secrets/
+
+# Build artifacts
+output/

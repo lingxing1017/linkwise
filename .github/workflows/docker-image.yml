@@ -1,0 +1,40 @@
+name: build docker image
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-arm64-tar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+
+      - name: set image version
+        id: version
+        run: echo "ver=$(date '+%Y.%m.%d')" >> "$GITHUB_OUTPUT"
+
+      - name: set up qemu
+        uses: docker/setup-qemu-action@v3
+
+      - name: set up docker buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: create output directory
+        run: mkdir -p output
+
+      - name: build arm64 image tar
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            -t linkwise:latest \
+            --output type=docker,dest=output/linkwise-${{ steps.version.outputs.ver }}.tar \
+            .
+
+      - name: upload image tar
+        uses: actions/upload-artifact@v4
+        with:
+          name: linkwise-${{ steps.version.outputs.ver }}
+          path: output/linkwise-${{ steps.version.outputs.ver }}.tar
+          if-no-files-found: error
