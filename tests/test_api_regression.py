@@ -20,6 +20,18 @@ def bookmark_titles(client):
     return [item["title"] for item in client.get("/api/bookmarks").get_json()]
 
 
+def test_health_check_returns_ok(client, app_module):
+    response = client.get("/api/health")
+    result = response.get_json()
+
+    assert response.status_code == 200
+    assert result == {
+        "status": "ok",
+        "app": "linkwise",
+        "version": app_module.APP_VERSION,
+    }
+
+
 def test_create_bookmark_normalizes_url_and_folder(client):
     response = post_bookmark(client)
 

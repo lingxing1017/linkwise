@@ -11,6 +11,7 @@ app = Flask(__name__, static_folder='static', static_url_path='/static')
 
 DB_DIR = os.environ.get('LINKWISE_DB_DIR', 'data')
 DB_FILE = os.path.join(DB_DIR, 'bookmarks.db')
+APP_VERSION = os.environ.get('LINKWISE_VERSION', 'dev')
 DEFAULT_WEBDAV_FILENAME = 'linkwise-bookmarks.html'
 DEFAULT_SECRET_FILE = os.environ.get('LINKWISE_SECRET_FILE', '/run/secrets/linkwise_secret_key')
 PASSWORD_AAD = b'linkwise-webdav-password-v1'
@@ -544,6 +545,15 @@ def get_webdav_config():
 @app.route('/')
 def index():
     return send_from_directory('.', 'index.html')
+
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({
+        'status': 'ok',
+        'app': 'linkwise',
+        'version': APP_VERSION
+    })
 
 
 @app.route('/api/bookmarks', methods=['GET'])
