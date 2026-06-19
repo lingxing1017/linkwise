@@ -1,9 +1,9 @@
-use crate::db;
 use crate::models::{
     BookmarkPayload, BulkBookmarksPayload, ErrorResponse, FolderPayload, HealthResponse,
     IdsPayload, MoveBookmarksPayload, RenameFolderPayload, ReorderBookmarksPayload,
     ReorderFoldersPayload,
 };
+use crate::{db, export};
 use worker::*;
 
 pub async fn handle(req: Request, env: Env) -> Result<Response> {
@@ -103,8 +103,20 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
                 Err((status, body)) => json_with_status(&body, status),
             }
         })
-        .get_async("/api/bookmarks/export", |_req, _ctx| async move {
-            not_implemented("GET /api/bookmarks/export is pending the D1 migration")
+        .get_async("/api/bookmarks/export", |_req, ctx| async move {
+            let db = ctx.env.d1(db::D1_BINDING)?;
+            let bookmarks = db::all_bookmarks(&db).await?;
+            let timestamp = (js_sys::Date::now() / 1000.0).floor() as i64;
+            let html = export::build_bookmarks_html(&bookmarks, timestamp);
+            let headers = Headers::new();
+            headers.set(
+                "Content-Disposition",
+                &format!(
+                    r#"attachment; filename="{}""#,
+                    export::current_export_filename()
+                ),
+            )?;
+            Ok(Response::from_html(html)?.with_headers(headers))
         })
         .get_async("/api/webdav/config", |_req, _ctx| async move {
             not_implemented("GET /api/webdav/config is pending the Worker secret migration")
