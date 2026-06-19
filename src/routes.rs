@@ -20,8 +20,9 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
                 Err((status, body)) => json_with_status(&body, status),
             }
         })
-        .get_async("/api/folder-orders", |_req, _ctx| async move {
-            not_implemented("GET /api/folder-orders is pending the D1 migration")
+        .get_async("/api/folder-orders", |_req, ctx| async move {
+            let db = ctx.env.d1(db::D1_BINDING)?;
+            Response::from_json(&db::all_folder_orders(&db).await?)
         })
         .get_async("/api/bookmarks/export", |_req, _ctx| async move {
             not_implemented("GET /api/bookmarks/export is pending the D1 migration")

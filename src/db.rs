@@ -1,5 +1,6 @@
 use crate::models::{
     Bookmark, BookmarkPayload, BookmarkSaveResponse, CountValue, DuplicateBookmarkResponse,
+    FolderOrder,
 };
 use url::Url;
 use worker::d1::{D1Database, D1Type};
@@ -13,6 +14,19 @@ pub async fn all_bookmarks(db: &D1Database) -> Result<Vec<Bookmark>> {
         SELECT id, title, url, folder, sort_order
         FROM bookmarks
         ORDER BY folder ASC, sort_order ASC, rowid DESC
+        "#,
+    )
+    .all()
+    .await?
+    .results()
+}
+
+pub async fn all_folder_orders(db: &D1Database) -> Result<Vec<FolderOrder>> {
+    db.prepare(
+        r#"
+        SELECT parent_folder, folder_name, sort_order
+        FROM folder_orders
+        ORDER BY parent_folder ASC, sort_order ASC, folder_name ASC
         "#,
     )
     .all()
