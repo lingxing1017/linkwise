@@ -1,7 +1,9 @@
 use crate::models::{
     Bookmark, BookmarkPayload, BookmarkSaveResponse, BulkBookmarksPayload, BulkBookmarksResponse,
-    CountValue, DeleteBookmarksResponse, DuplicateBookmarkResponse, FolderOrder, IdsPayload,
-    MoveBookmarksPayload, MoveBookmarksResponse, ReorderBookmarksPayload, ReorderBookmarksResponse,
+    CountValue, DeleteBookmarksResponse, DeleteFolderResponse, DuplicateBookmarkResponse,
+    FolderOrder, FolderPayload, IdsPayload, MoveBookmarksPayload, MoveBookmarksResponse,
+    MoveFolderUpResponse, RenameFolderPayload, RenameFolderResponse, ReorderBookmarksPayload,
+    ReorderBookmarksResponse, ReorderFoldersPayload, ReorderFoldersResponse,
 };
 use std::collections::{HashMap, HashSet};
 use url::Url;
@@ -334,6 +336,183 @@ pub async fn delete_bookmark(db: &D1Database, id: &str) -> Result<serde_json::Va
     Ok(serde_json::json!({ "status": "success" }))
 }
 
+pub async fn reorder_folders(
+    db: &D1Database,
+    payload: ReorderFoldersPayload,
+) -> Result<ReorderFoldersResponse> {
+    let parent_folder = normalize_folder_path(&payload.parent_folder.unwrap_or_default());
+    let folder_names = payload
+        .folders
+        .into_iter()
+        .filter_map(|item| {
+            let parts = split_folder_path(&item);
+            parts.last().cloned().or_else(|| {
+                let trimmed = item.trim().to_string();
+                (!trimmed.is_empty()).then_some(trimmed)
+            })
+        })
+        .collect::<Vec<_>>();
+    let existing_names = folder_names_under(db, &parent_folder).await?;
+    let existing_name_set = existing_names.iter().cloned().collect::<HashSet<_>>();
+    let mut valid_names = Vec::new();
+
+    for name in folder_names {
+        if existing_name_set.contains(&name) && !valid_names.contains(&name) {
+            valid_names.push(name);
+        }
+    }
+
+    let mut ordered_names = valid_names;
+    for name in existing_names {
+        if !ordered_names.contains(&name) {
+            ordered_names.push(name);
+        }
+    }
+
+    for (sort_order, name) in ordered_names.iter().enumerate() {
+        let args = [
+            D1Type::Text(&parent_folder),
+            D1Type::Text(name),
+            D1Type::Integer(sort_order as i32),
+        ];
+        db.prepare(
+            r#"
+            INSERT OR REPLACE INTO folder_orders (parent_folder, folder_name, sort_order)
+            VALUES (?, ?, ?)
+            "#,
+        )
+        .bind_refs(&args)?
+        .run()
+        .await?;
+    }
+
+    Ok(ReorderFoldersResponse {
+        status: "success",
+        parent_folder,
+        updated_count: ordered_names.len(),
+    })
+}
+
+pub async fn move_folder_up(
+    db: &D1Database,
+    payload: FolderPayload,
+) -> Result<Result<MoveFolderUpResponse, (u16, serde_json::Value)>> {
+    let folder = normalize_folder_path(&payload.folder.unwrap_or_default());
+
+    if folder.is_empty() {
+        return Ok(Err((
+            400,
+            serde_json::to_value(crate::models::ErrorResponse::new("请选择要操作的目录"))?,
+        )));
+    }
+
+    let parts = split_folder_path(&folder);
+    let parent_folder = parts[..parts.len().saturating_sub(1)].join(" / ");
+    let rows = bookmark_folder_rows_in_branch(db, &folder).await?;
+    let mut moved_count = 0;
+
+    for row in rows {
+        let Some(new_folder) = move_folder_path_up(&row.folder, &folder, &parent_folder) else {
+            continue;
+        };
+        let args = [D1Type::Text(&new_folder), D1Type::Text(&row.id)];
+        db.prepare("UPDATE bookmarks SET folder = ? WHERE id = ?")
+            .bind_refs(&args)?
+            .run()
+            .await?;
+        moved_count += 1;
+    }
+
+    sync_folder_order_move_up(db, &folder, &parent_folder).await?;
+
+    Ok(Ok(MoveFolderUpResponse {
+        status: "success",
+        message: "目录已删除，书签已移动到上一层",
+        moved_count,
+        parent_folder,
+    }))
+}
+
+pub async fn rename_folder(
+    db: &D1Database,
+    payload: RenameFolderPayload,
+) -> Result<Result<RenameFolderResponse, (u16, serde_json::Value)>> {
+    let folder = normalize_folder_path(&payload.folder.unwrap_or_default());
+    let new_folder = normalize_folder_path(&payload.new_folder.unwrap_or_default());
+
+    if folder.is_empty() {
+        return Ok(Err((
+            400,
+            serde_json::to_value(crate::models::ErrorResponse::new("请选择要操作的目录"))?,
+        )));
+    }
+
+    if folder == new_folder {
+        return Ok(Err((
+            400,
+            serde_json::to_value(crate::models::ErrorResponse::new("新目录和原目录相同"))?,
+        )));
+    }
+
+    let rows = bookmark_folder_rows_in_branch(db, &folder).await?;
+    let mut renamed_count = 0;
+
+    for row in rows {
+        let updated_folder = replace_folder_path(&row.folder, &folder, &new_folder);
+
+        if updated_folder == row.folder {
+            continue;
+        }
+
+        let args = [D1Type::Text(&updated_folder), D1Type::Text(&row.id)];
+        db.prepare("UPDATE bookmarks SET folder = ? WHERE id = ?")
+            .bind_refs(&args)?
+            .run()
+            .await?;
+        renamed_count += 1;
+    }
+
+    sync_folder_order_rename(db, &folder, &new_folder).await?;
+
+    Ok(Ok(RenameFolderResponse {
+        status: "success",
+        message: "目录已更新",
+        renamed_count,
+        folder,
+        new_folder,
+    }))
+}
+
+pub async fn delete_folder(
+    db: &D1Database,
+    payload: FolderPayload,
+) -> Result<Result<DeleteFolderResponse, (u16, serde_json::Value)>> {
+    let folder = normalize_folder_path(&payload.folder.unwrap_or_default());
+
+    if folder.is_empty() {
+        return Ok(Err((
+            400,
+            serde_json::to_value(crate::models::ErrorResponse::new("请选择要操作的目录"))?,
+        )));
+    }
+
+    let like = folder_like_pattern(&folder);
+    let args = [D1Type::Text(&folder), D1Type::Text(&like)];
+    let result = db
+        .prepare("DELETE FROM bookmarks WHERE folder = ? OR folder LIKE ?")
+        .bind_refs(&args)?
+        .run()
+        .await?;
+
+    delete_folder_order_branch(db, &folder).await?;
+
+    Ok(Ok(DeleteFolderResponse {
+        status: "success",
+        message: "目录和目录下书签已删除",
+        deleted_count: result_changes(&result)?,
+    }))
+}
+
 #[derive(serde::Deserialize)]
 struct ExistingBookmarkOrder {
     folder: String,
@@ -402,6 +581,211 @@ async fn bookmark_ids_in_folder(db: &D1Database, folder: &str) -> Result<Vec<Str
         .await?
         .results::<IdValue>()?;
     Ok(rows.into_iter().map(|row| row.id).collect())
+}
+
+async fn folder_names_under(db: &D1Database, parent_folder: &str) -> Result<Vec<String>> {
+    #[derive(serde::Deserialize)]
+    struct FolderNameValue {
+        folder_name: String,
+    }
+
+    let args = [D1Type::Text(parent_folder)];
+    let rows = db
+        .prepare(
+            r#"
+            SELECT folder_name
+            FROM folder_orders
+            WHERE parent_folder = ?
+            ORDER BY sort_order ASC, folder_name ASC
+            "#,
+        )
+        .bind_refs(&args)?
+        .all()
+        .await?
+        .results::<FolderNameValue>()?;
+    Ok(rows.into_iter().map(|row| row.folder_name).collect())
+}
+
+#[derive(serde::Deserialize)]
+struct BookmarkFolderRow {
+    id: String,
+    folder: String,
+}
+
+async fn bookmark_folder_rows_in_branch(
+    db: &D1Database,
+    folder: &str,
+) -> Result<Vec<BookmarkFolderRow>> {
+    let like = folder_like_pattern(folder);
+    let args = [D1Type::Text(folder), D1Type::Text(&like)];
+    db.prepare("SELECT id, folder FROM bookmarks WHERE folder = ? OR folder LIKE ?")
+        .bind_refs(&args)?
+        .all()
+        .await?
+        .results()
+}
+
+async fn all_folder_order_rows(db: &D1Database) -> Result<Vec<FolderOrder>> {
+    db.prepare("SELECT parent_folder, folder_name, sort_order FROM folder_orders")
+        .all()
+        .await?
+        .results()
+}
+
+async fn sync_folder_order_rename(db: &D1Database, folder: &str, new_folder: &str) -> Result<()> {
+    let rows = all_folder_order_rows(db).await?;
+
+    for row in rows {
+        let current_path = join_folder_path(&row.parent_folder, &row.folder_name);
+        let updated_path = replace_folder_path(&current_path, folder, new_folder);
+
+        if updated_path == current_path {
+            continue;
+        }
+
+        delete_folder_order_row(db, &row.parent_folder, &row.folder_name).await?;
+        let updated_parts = split_folder_path(&updated_path);
+
+        if updated_parts.is_empty() {
+            continue;
+        }
+
+        let updated_parent = updated_parts[..updated_parts.len() - 1].join(" / ");
+        let updated_name = updated_parts.last().cloned().unwrap_or_default();
+        insert_folder_order_row(db, &updated_parent, &updated_name, row.sort_order).await?;
+    }
+
+    ensure_folder_order(db, new_folder).await
+}
+
+async fn delete_folder_order_branch(db: &D1Database, folder: &str) -> Result<()> {
+    let rows = all_folder_order_rows(db).await?;
+
+    for row in rows {
+        let current_path = join_folder_path(&row.parent_folder, &row.folder_name);
+
+        if current_path == folder || current_path.starts_with(&folder_child_prefix(folder)) {
+            delete_folder_order_row(db, &row.parent_folder, &row.folder_name).await?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn sync_folder_order_move_up(
+    db: &D1Database,
+    folder: &str,
+    parent_folder: &str,
+) -> Result<()> {
+    let rows = all_folder_order_rows(db).await?;
+
+    for row in rows {
+        let current_path = join_folder_path(&row.parent_folder, &row.folder_name);
+
+        if current_path == folder {
+            delete_folder_order_row(db, &row.parent_folder, &row.folder_name).await?;
+            continue;
+        }
+
+        if !current_path.starts_with(&folder_child_prefix(folder)) {
+            continue;
+        }
+
+        let suffix = &current_path[folder_child_prefix(folder).len()..];
+        let updated_path = join_folder_path(parent_folder, suffix);
+        let updated_parts = split_folder_path(&updated_path);
+        delete_folder_order_row(db, &row.parent_folder, &row.folder_name).await?;
+
+        if updated_parts.is_empty() {
+            continue;
+        }
+
+        let updated_parent = updated_parts[..updated_parts.len() - 1].join(" / ");
+        let updated_name = updated_parts.last().cloned().unwrap_or_default();
+        insert_folder_order_row(db, &updated_parent, &updated_name, row.sort_order).await?;
+    }
+
+    Ok(())
+}
+
+async fn delete_folder_order_row(
+    db: &D1Database,
+    parent_folder: &str,
+    folder_name: &str,
+) -> Result<()> {
+    let args = [D1Type::Text(parent_folder), D1Type::Text(folder_name)];
+    db.prepare("DELETE FROM folder_orders WHERE parent_folder = ? AND folder_name = ?")
+        .bind_refs(&args)?
+        .run()
+        .await?;
+    Ok(())
+}
+
+async fn insert_folder_order_row(
+    db: &D1Database,
+    parent_folder: &str,
+    folder_name: &str,
+    sort_order: i64,
+) -> Result<()> {
+    let args = [
+        D1Type::Text(parent_folder),
+        D1Type::Text(folder_name),
+        D1Type::Integer(sort_order as i32),
+    ];
+    db.prepare(
+        r#"
+        INSERT OR REPLACE INTO folder_orders (parent_folder, folder_name, sort_order)
+        VALUES (?, ?, ?)
+        "#,
+    )
+    .bind_refs(&args)?
+    .run()
+    .await?;
+    Ok(())
+}
+
+fn replace_folder_path(folder_path: &str, old_prefix: &str, new_prefix: &str) -> String {
+    if folder_path == old_prefix {
+        return new_prefix.to_string();
+    }
+
+    let prefix = folder_child_prefix(old_prefix);
+    if folder_path.starts_with(&prefix) {
+        let suffix = &folder_path[prefix.len()..];
+        return join_folder_path(new_prefix, suffix);
+    }
+
+    folder_path.to_string()
+}
+
+fn move_folder_path_up(folder_path: &str, folder: &str, parent_folder: &str) -> Option<String> {
+    if folder_path == folder {
+        return Some(parent_folder.to_string());
+    }
+
+    let prefix = folder_child_prefix(folder);
+    if folder_path.starts_with(&prefix) {
+        let suffix = &folder_path[prefix.len()..];
+        return Some(join_folder_path(parent_folder, suffix));
+    }
+
+    None
+}
+
+fn join_folder_path(parent: &str, name: &str) -> String {
+    match (parent.is_empty(), name.is_empty()) {
+        (true, _) => name.to_string(),
+        (_, true) => parent.to_string(),
+        (false, false) => format!("{parent} / {name}"),
+    }
+}
+
+fn folder_child_prefix(folder: &str) -> String {
+    format!("{folder} / ")
+}
+
+fn folder_like_pattern(folder: &str) -> String {
+    format!("{}%", folder_child_prefix(folder))
 }
 
 fn clean_ids(ids: Vec<String>) -> Vec<String> {

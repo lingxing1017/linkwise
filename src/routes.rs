@@ -1,7 +1,8 @@
 use crate::db;
 use crate::models::{
-    BookmarkPayload, BulkBookmarksPayload, ErrorResponse, HealthResponse, IdsPayload,
-    MoveBookmarksPayload, ReorderBookmarksPayload,
+    BookmarkPayload, BulkBookmarksPayload, ErrorResponse, FolderPayload, HealthResponse,
+    IdsPayload, MoveBookmarksPayload, RenameFolderPayload, ReorderBookmarksPayload,
+    ReorderFoldersPayload,
 };
 use worker::*;
 
@@ -66,6 +67,41 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/folder-orders", |_req, ctx| async move {
             let db = ctx.env.d1(db::D1_BINDING)?;
             Response::from_json(&db::all_folder_orders(&db).await?)
+        })
+        .post_async("/api/folders/reorder", |mut req, ctx| async move {
+            let db = ctx.env.d1(db::D1_BINDING)?;
+            let payload = req
+                .json::<ReorderFoldersPayload>()
+                .await
+                .unwrap_or_default();
+            Response::from_json(&db::reorder_folders(&db, payload).await?)
+        })
+        .post_async("/api/folders/move-up", |mut req, ctx| async move {
+            let db = ctx.env.d1(db::D1_BINDING)?;
+            let payload = req.json::<FolderPayload>().await.unwrap_or_default();
+
+            match db::move_folder_up(&db, payload).await? {
+                Ok(response) => Response::from_json(&response),
+                Err((status, body)) => json_with_status(&body, status),
+            }
+        })
+        .post_async("/api/folders/rename", |mut req, ctx| async move {
+            let db = ctx.env.d1(db::D1_BINDING)?;
+            let payload = req.json::<RenameFolderPayload>().await.unwrap_or_default();
+
+            match db::rename_folder(&db, payload).await? {
+                Ok(response) => Response::from_json(&response),
+                Err((status, body)) => json_with_status(&body, status),
+            }
+        })
+        .post_async("/api/folders/delete", |mut req, ctx| async move {
+            let db = ctx.env.d1(db::D1_BINDING)?;
+            let payload = req.json::<FolderPayload>().await.unwrap_or_default();
+
+            match db::delete_folder(&db, payload).await? {
+                Ok(response) => Response::from_json(&response),
+                Err((status, body)) => json_with_status(&body, status),
+            }
         })
         .get_async("/api/bookmarks/export", |_req, _ctx| async move {
             not_implemented("GET /api/bookmarks/export is pending the D1 migration")

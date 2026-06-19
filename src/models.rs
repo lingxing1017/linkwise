@@ -88,6 +88,24 @@ pub struct ReorderBookmarksPayload {
     pub ids: Vec<String>,
 }
 
+#[derive(Debug, Default, Deserialize)]
+pub struct ReorderFoldersPayload {
+    pub parent_folder: Option<String>,
+    #[serde(default)]
+    pub folders: Vec<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct FolderPayload {
+    pub folder: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct RenameFolderPayload {
+    pub folder: Option<String>,
+    pub new_folder: Option<String>,
+}
+
 #[derive(Serialize)]
 pub struct MoveBookmarksResponse {
     pub status: &'static str,
@@ -105,6 +123,37 @@ pub struct ReorderBookmarksResponse {
 #[derive(Serialize)]
 pub struct DeleteBookmarksResponse {
     pub status: &'static str,
+    pub deleted_count: usize,
+}
+
+#[derive(Serialize)]
+pub struct ReorderFoldersResponse {
+    pub status: &'static str,
+    pub parent_folder: String,
+    pub updated_count: usize,
+}
+
+#[derive(Serialize)]
+pub struct MoveFolderUpResponse {
+    pub status: &'static str,
+    pub message: &'static str,
+    pub moved_count: usize,
+    pub parent_folder: String,
+}
+
+#[derive(Serialize)]
+pub struct RenameFolderResponse {
+    pub status: &'static str,
+    pub message: &'static str,
+    pub renamed_count: usize,
+    pub folder: String,
+    pub new_folder: String,
+}
+
+#[derive(Serialize)]
+pub struct DeleteFolderResponse {
+    pub status: &'static str,
+    pub message: &'static str,
     pub deleted_count: usize,
 }
 
