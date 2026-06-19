@@ -1,5 +1,8 @@
 use crate::db;
-use crate::models::{BookmarkPayload, ErrorResponse, HealthResponse};
+use crate::models::{
+    BookmarkPayload, BulkBookmarksPayload, ErrorResponse, HealthResponse, IdsPayload,
+    MoveBookmarksPayload, ReorderBookmarksPayload,
+};
 use worker::*;
 
 pub async fn handle(req: Request, env: Env) -> Result<Response> {
@@ -19,6 +22,46 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
                 Ok(response) => Response::from_json(&response),
                 Err((status, body)) => json_with_status(&body, status),
             }
+        })
+        .post_async("/api/bookmarks/bulk", |mut req, ctx| async move {
+            let db = ctx.env.d1(db::D1_BINDING)?;
+            let payload = req.json::<BulkBookmarksPayload>().await.unwrap_or_default();
+
+            match db::bulk_save_bookmarks(&db, payload).await? {
+                Ok(response) => Response::from_json(&response),
+                Err((status, body)) => json_with_status(&body, status),
+            }
+        })
+        .post_async("/api/bookmarks/move", |mut req, ctx| async move {
+            let db = ctx.env.d1(db::D1_BINDING)?;
+            let payload = req.json::<MoveBookmarksPayload>().await.unwrap_or_default();
+
+            match db::move_bookmarks(&db, payload).await? {
+                Ok(response) => Response::from_json(&response),
+                Err((status, body)) => json_with_status(&body, status),
+            }
+        })
+        .post_async("/api/bookmarks/reorder", |mut req, ctx| async move {
+            let db = ctx.env.d1(db::D1_BINDING)?;
+            let payload = req
+                .json::<ReorderBookmarksPayload>()
+                .await
+                .unwrap_or_default();
+            Response::from_json(&db::reorder_bookmarks(&db, payload).await?)
+        })
+        .post_async("/api/bookmarks/delete", |mut req, ctx| async move {
+            let db = ctx.env.d1(db::D1_BINDING)?;
+            let payload = req.json::<IdsPayload>().await.unwrap_or_default();
+
+            match db::delete_bookmarks(&db, payload).await? {
+                Ok(response) => Response::from_json(&response),
+                Err((status, body)) => json_with_status(&body, status),
+            }
+        })
+        .delete_async("/api/bookmarks/:id", |_req, ctx| async move {
+            let db = ctx.env.d1(db::D1_BINDING)?;
+            let id = ctx.param("id").map(String::as_str).unwrap_or("");
+            Response::from_json(&db::delete_bookmark(&db, id).await?)
         })
         .get_async("/api/folder-orders", |_req, ctx| async move {
             let db = ctx.env.d1(db::D1_BINDING)?;

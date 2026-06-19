@@ -37,6 +37,12 @@ pub struct BookmarkPayload {
     pub folder: Option<String>,
 }
 
+#[derive(Debug, Default, Deserialize)]
+pub struct BulkBookmarksPayload {
+    #[serde(default)]
+    pub bookmarks: Vec<BookmarkPayload>,
+}
+
 #[derive(Deserialize)]
 pub struct CountValue {
     pub value: i64,
@@ -50,6 +56,56 @@ pub struct BookmarkSaveResponse {
     pub url: String,
     pub folder: String,
     pub total_count: i64,
+}
+
+#[derive(Serialize)]
+pub struct BulkBookmarksResponse {
+    pub status: &'static str,
+    pub imported_count: usize,
+    pub imported_ids: Vec<String>,
+    pub duplicate_count: usize,
+    pub skipped_count: usize,
+    pub total_count: i64,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct IdsPayload {
+    #[serde(default)]
+    pub ids: Vec<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct MoveBookmarksPayload {
+    #[serde(default)]
+    pub ids: Vec<String>,
+    pub folder: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct ReorderBookmarksPayload {
+    pub folder: Option<String>,
+    #[serde(default)]
+    pub ids: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct MoveBookmarksResponse {
+    pub status: &'static str,
+    pub moved_count: usize,
+    pub folder: String,
+}
+
+#[derive(Serialize)]
+pub struct ReorderBookmarksResponse {
+    pub status: &'static str,
+    pub folder: String,
+    pub updated_count: usize,
+}
+
+#[derive(Serialize)]
+pub struct DeleteBookmarksResponse {
+    pub status: &'static str,
+    pub deleted_count: usize,
 }
 
 #[derive(Serialize)]
