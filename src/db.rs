@@ -1,10 +1,10 @@
 use crate::models::{
-    Bookmark, BookmarkPayload, BookmarkSaveResponse, BulkBookmarksPayload, BulkBookmarksResponse,
-    CountValue, DeleteBookmarksResponse, DeleteFolderResponse, DuplicateBookmarkResponse,
-    FolderOrder, FolderPayload, IdsPayload, MoveBookmarksPayload, MoveBookmarksResponse,
-    MoveFolderUpResponse, RenameFolderPayload, RenameFolderResponse, ReorderBookmarksPayload,
-    ReorderBookmarksResponse, ReorderFoldersPayload, ReorderFoldersResponse, WebdavConfig,
-    WebdavConfigPayload, WebdavConfigResponse,
+    Bookmark, BookmarkPayload, BookmarkSaveResponse, BootstrapResponse, BulkBookmarksPayload,
+    BulkBookmarksResponse, CountValue, DeleteBookmarksResponse, DeleteFolderResponse,
+    DuplicateBookmarkResponse, FolderOrder, FolderPayload, IdsPayload, MoveBookmarksPayload,
+    MoveBookmarksResponse, MoveFolderUpResponse, RenameFolderPayload, RenameFolderResponse,
+    ReorderBookmarksPayload, ReorderBookmarksResponse, ReorderFoldersPayload,
+    ReorderFoldersResponse, WebdavConfig, WebdavConfigPayload, WebdavConfigResponse,
 };
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -20,6 +20,16 @@ const DEFAULT_WEBDAV_FILENAME: &str = "linkwise-bookmarks.html";
 const SCHEMA_VERSION_KEY: &str = "schema.version";
 const SCHEMA_VERSION: &str = "2026-06-19-initial";
 const D1_MAX_BIND_PARAMS: usize = 100;
+const ALL_BOOKMARKS_SQL: &str = r#"
+    SELECT id, title, url, folder, sort_order
+    FROM bookmarks
+    ORDER BY folder ASC, sort_order ASC, rowid DESC
+    "#;
+const ALL_FOLDER_ORDERS_SQL: &str = r#"
+    SELECT parent_folder, folder_name, sort_order
+    FROM folder_orders
+    ORDER BY parent_folder ASC, sort_order ASC, folder_name ASC
+    "#;
 static SCHEMA_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 pub async fn initialize_schema(db: &D1Database) -> Result<()> {
@@ -103,29 +113,41 @@ pub async fn initialize_schema(db: &D1Database) -> Result<()> {
 }
 
 pub async fn all_bookmarks(db: &D1Database) -> Result<Vec<Bookmark>> {
-    db.prepare(
-        r#"
-        SELECT id, title, url, folder, sort_order
-        FROM bookmarks
-        ORDER BY folder ASC, sort_order ASC, rowid DESC
-        "#,
-    )
+    db.prepare(ALL_BOOKMARKS_SQL)
     .all()
     .await?
     .results()
 }
 
 pub async fn all_folder_orders(db: &D1Database) -> Result<Vec<FolderOrder>> {
-    db.prepare(
-        r#"
-        SELECT parent_folder, folder_name, sort_order
-        FROM folder_orders
-        ORDER BY parent_folder ASC, sort_order ASC, folder_name ASC
-        "#,
-    )
+    db.prepare(ALL_FOLDER_ORDERS_SQL)
     .all()
     .await?
     .results()
+}
+
+pub async fn bootstrap_data(db: &D1Database) -> Result<BootstrapResponse> {
+    let mut results = db
+        .batch(vec![
+            db.prepare(ALL_BOOKMARKS_SQL),
+            db.prepare(ALL_FOLDER_ORDERS_SQL),
+        ])
+        .await?
+        .into_iter();
+
+    let bookmarks = match results.next() {
+        Some(result) => result.results::<Bookmark>()?,
+        None => Vec::new(),
+    };
+    let folder_orders = match results.next() {
+        Some(result) => result.results::<FolderOrder>()?,
+        None => Vec::new(),
+    };
+
+    Ok(BootstrapResponse {
+        bookmarks,
+        folder_orders,
+    })
 }
 
 pub async fn save_bookmark(

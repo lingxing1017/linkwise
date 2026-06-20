@@ -16,6 +16,10 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
             let db = initialized_db(&ctx.env).await?;
             Response::from_json(&db::all_bookmarks(&db).await?)
         })
+        .get_async("/api/bootstrap", |_req, ctx| async move {
+            let db = initialized_db(&ctx.env).await?;
+            Response::from_json(&db::bootstrap_data(&db).await?)
+        })
         .post_async("/api/bookmarks", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
             let payload = req.json::<BookmarkPayload>().await.unwrap_or_default();

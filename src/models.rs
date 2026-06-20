@@ -29,6 +29,12 @@ pub struct Bookmark {
     pub sort_order: i64,
 }
 
+#[derive(Serialize)]
+pub struct BootstrapResponse {
+    pub bookmarks: Vec<Bookmark>,
+    pub folder_orders: Vec<FolderOrder>,
+}
+
 #[derive(Debug, Default, Deserialize)]
 pub struct BookmarkPayload {
     pub id: Option<String>,

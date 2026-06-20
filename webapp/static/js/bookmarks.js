@@ -199,12 +199,10 @@ function ensureParentFoldersExpanded(folderPath) {
 
 async function fetchList() {
     try {
-        const [bookmarkRes, folderOrderRes] = await Promise.all([
-            fetch(`${API_BASE}/bookmarks`),
-            fetch(`${API_BASE}/folder-orders`)
-        ]);
-        const data = await parseApiJson(bookmarkRes, '获取书签失败');
-        const orderData = await parseApiJson(folderOrderRes, '获取目录排序失败');
+        const res = await fetch(`${API_BASE}/bootstrap`);
+        const result = await parseApiJson(res, '获取书签失败');
+        const data = result.bookmarks;
+        const orderData = result.folder_orders;
 
         if (!Array.isArray(data) || !Array.isArray(orderData)) {
             throw new Error('INVALID_BOOKMARKS_RESPONSE');
