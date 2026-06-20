@@ -9,13 +9,14 @@ use crate::models::{
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use url::Url;
-use worker::d1::{D1Database, D1Result, D1Type};
+use worker::d1::{D1Database, D1PreparedArgument as WorkerD1PreparedArgument, D1Result, D1Type};
 use worker::*;
 
 pub const D1_BINDING: &str = "DB";
 const DEFAULT_WEBDAV_FILENAME: &str = "linkwise-bookmarks.html";
 const SCHEMA_VERSION_KEY: &str = "schema.version";
 const SCHEMA_VERSION: &str = "2026-06-19-initial";
+const D1_MAX_BIND_PARAMS: usize = 100;
 static SCHEMA_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 pub async fn initialize_schema(db: &D1Database) -> Result<()> {
@@ -237,7 +238,19 @@ pub async fn bulk_save_bookmarks(
     let now = timestamp_id();
 
     let existing_urls = existing_urls(db).await?;
+    let mut bookmark_next_orders = bookmark_next_orders(db).await?;
+    let folder_orders = all_folder_orders(db).await?;
+    let mut existing_folder_orders = HashSet::<(String, String)>::new();
     let mut folder_next_orders = HashMap::<String, i64>::new();
+    let mut folder_order_items = Vec::<(String, String, i64)>::new();
+
+    for row in folder_orders {
+        existing_folder_orders.insert((row.parent_folder.clone(), row.folder_name.clone()));
+        let next_order = folder_next_orders
+            .entry(row.parent_folder)
+            .or_insert(row.sort_order + 1);
+        *next_order = (*next_order).max(row.sort_order + 1);
+    }
 
     for (index, item) in payload.bookmarks.into_iter().enumerate() {
         let id = item
@@ -270,36 +283,21 @@ pub async fn bulk_save_bookmarks(
 
         seen_urls.insert(url.clone());
 
-        if !folder_next_orders.contains_key(&folder) {
-            folder_next_orders.insert(folder.clone(), next_bookmark_sort_order(db, &folder).await?);
-        }
-
-        let sort_order = folder_next_orders.get(&folder).copied().unwrap_or(0);
-        folder_next_orders.insert(folder.clone(), sort_order + 1);
-        ensure_folder_order(db, &folder).await?;
+        let sort_order = bookmark_next_orders.get(&folder).copied().unwrap_or(0);
+        bookmark_next_orders.insert(folder.clone(), sort_order + 1);
+        collect_missing_folder_orders(
+            &folder,
+            &mut existing_folder_orders,
+            &mut folder_next_orders,
+            &mut folder_order_items,
+        );
 
         imported_ids.push(id.clone());
         valid_items.push((id, title, url, folder, sort_order));
     }
 
-    for (id, title, url, folder, sort_order) in &valid_items {
-        let args = [
-            D1Type::Text(id),
-            D1Type::Text(title),
-            D1Type::Text(url),
-            D1Type::Text(folder),
-            D1Type::Integer(*sort_order as i32),
-        ];
-        db.prepare(
-            r#"
-            INSERT OR REPLACE INTO bookmarks (id, title, url, folder, sort_order)
-            VALUES (?, ?, ?, ?, ?)
-            "#,
-        )
-        .bind_refs(&args)?
-        .run()
-        .await?;
-    }
+    insert_folder_orders_batch(db, &folder_order_items).await?;
+    insert_bookmarks_batch(db, &valid_items).await?;
 
     Ok(Ok(BulkBookmarksResponse {
         status: "success",
@@ -309,6 +307,104 @@ pub async fn bulk_save_bookmarks(
         skipped_count,
         total_count: count_bookmarks(db).await?,
     }))
+}
+
+async fn insert_bookmarks_batch(
+    db: &D1Database,
+    valid_items: &[(String, String, String, String, i64)],
+) -> Result<()> {
+    const BINDS_PER_ROW: usize = 5;
+
+    for chunk in valid_items.chunks(sql_chunk_size(BINDS_PER_ROW, 0)) {
+        let placeholders = repeat_row_placeholders(chunk.len(), BINDS_PER_ROW);
+        let query = format!(
+            r#"
+            INSERT OR REPLACE INTO bookmarks (id, title, url, folder, sort_order)
+            VALUES {placeholders}
+            "#
+        );
+        let mut values = Vec::with_capacity(chunk.len() * BINDS_PER_ROW);
+
+        for (id, title, url, folder, sort_order) in chunk {
+            values.push(D1Type::Text(id));
+            values.push(D1Type::Text(title));
+            values.push(D1Type::Text(url));
+            values.push(D1Type::Text(folder));
+            values.push(D1Type::Integer(*sort_order as i32));
+        }
+        let args = prepared_args(&values);
+
+        db.prepare(query).bind_refs(&args)?.run().await?;
+    }
+
+    Ok(())
+}
+
+async fn insert_folder_orders_batch(
+    db: &D1Database,
+    folder_order_items: &[(String, String, i64)],
+) -> Result<()> {
+    const BINDS_PER_ROW: usize = 3;
+
+    for chunk in folder_order_items.chunks(sql_chunk_size(BINDS_PER_ROW, 0)) {
+        let placeholders = repeat_row_placeholders(chunk.len(), BINDS_PER_ROW);
+        let query = format!(
+            r#"
+            INSERT OR IGNORE INTO folder_orders (parent_folder, folder_name, sort_order)
+            VALUES {placeholders}
+            "#
+        );
+        let mut values = Vec::with_capacity(chunk.len() * BINDS_PER_ROW);
+
+        for (parent_folder, folder_name, sort_order) in chunk {
+            values.push(D1Type::Text(parent_folder));
+            values.push(D1Type::Text(folder_name));
+            values.push(D1Type::Integer(*sort_order as i32));
+        }
+        let args = prepared_args(&values);
+
+        db.prepare(query).bind_refs(&args)?.run().await?;
+    }
+
+    Ok(())
+}
+
+fn collect_missing_folder_orders(
+    folder: &str,
+    existing_folder_orders: &mut HashSet<(String, String)>,
+    folder_next_orders: &mut HashMap<String, i64>,
+    folder_order_items: &mut Vec<(String, String, i64)>,
+) {
+    let parts = split_folder_path(folder);
+
+    for index in 0..parts.len() {
+        let folder_name = parts[index].clone();
+        let parent_folder = parts[..index].join(" / ");
+        let key = (parent_folder.clone(), folder_name.clone());
+
+        if existing_folder_orders.contains(&key) {
+            continue;
+        }
+
+        let sort_order = folder_next_orders.get(&parent_folder).copied().unwrap_or(0);
+        folder_next_orders.insert(parent_folder.clone(), sort_order + 1);
+        existing_folder_orders.insert(key);
+        folder_order_items.push((parent_folder, folder_name, sort_order));
+    }
+}
+
+fn sql_chunk_size(binds_per_row: usize, fixed_bind_count: usize) -> usize {
+    let available = D1_MAX_BIND_PARAMS.saturating_sub(fixed_bind_count);
+    (available / binds_per_row).max(1)
+}
+
+fn prepared_args<'a>(values: &'a [D1Type<'a>]) -> Vec<WorkerD1PreparedArgument<'a>> {
+    values.iter().map(WorkerD1PreparedArgument::new).collect()
+}
+
+fn repeat_row_placeholders(row_count: usize, binds_per_row: usize) -> String {
+    let row = format!("({})", vec!["?"; binds_per_row].join(", "));
+    vec![row; row_count].join(", ")
 }
 
 pub async fn move_bookmarks(
@@ -695,6 +791,30 @@ async fn count_bookmarks(db: &D1Database) -> Result<i64> {
         .first::<CountValue>(None)
         .await?;
     Ok(row.map(|row| row.value).unwrap_or(0))
+}
+
+#[derive(serde::Deserialize)]
+struct FolderNextOrderValue {
+    folder: String,
+    value: i64,
+}
+
+async fn bookmark_next_orders(db: &D1Database) -> Result<HashMap<String, i64>> {
+    let rows = db
+        .prepare(
+            r#"
+            SELECT folder, COALESCE(MAX(sort_order), -1) + 1 AS value
+            FROM bookmarks
+            GROUP BY folder
+            "#,
+        )
+        .all()
+        .await?
+        .results::<FolderNextOrderValue>()?;
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.folder, row.value))
+        .collect())
 }
 
 #[derive(serde::Deserialize)]
