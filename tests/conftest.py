@@ -13,7 +13,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-APP_FILE = ROOT / "app" / "app.py"
+APP_FILE = ROOT / "src" / "app.py"
 PYTHON = ROOT / ".venv" / "bin" / "python"
 
 
@@ -84,8 +84,8 @@ def live_server(tmp_path):
     env["PORT"] = str(port)
 
     process = subprocess.Popen(
-        [str(PYTHON), "app.py"],
-        cwd=ROOT / "app",
+        [str(PYTHON), str(APP_FILE)],
+        cwd=ROOT,
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,

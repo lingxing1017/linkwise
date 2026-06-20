@@ -7,9 +7,17 @@ import os
 import time
 from urllib.parse import urlparse
 
-app = Flask(__name__, static_folder='static', static_url_path='/static')
+SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SRC_DIR)
+WEBAPP_DIR = os.path.join(PROJECT_ROOT, 'webapp')
 
-DB_DIR = os.environ.get('LINKWISE_DB_DIR', 'data')
+app = Flask(
+    __name__,
+    static_folder=os.path.join(WEBAPP_DIR, 'static'),
+    static_url_path='/static'
+)
+
+DB_DIR = os.environ.get('LINKWISE_DB_DIR') or os.path.join(PROJECT_ROOT, 'data')
 DB_FILE = os.path.join(DB_DIR, 'bookmarks.db')
 APP_VERSION = os.environ.get('LINKWISE_VERSION', 'dev')
 DEFAULT_WEBDAV_FILENAME = 'linkwise-bookmarks.html'
@@ -555,7 +563,7 @@ def get_webdav_config():
 
 @app.route('/')
 def index():
-    return send_from_directory('.', 'index.html')
+    return send_from_directory(WEBAPP_DIR, 'index.html')
 
 
 @app.route('/api/health', methods=['GET'])

@@ -4,8 +4,9 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir flask gunicorn cryptography
 
-COPY app/ /app/
+COPY src/ /app/src/
+COPY webapp/ /app/webapp/
 
 EXPOSE 7500
 
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:7500", "app:app"]
+CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:7500", "--chdir", "/app/src", "app:app"]
