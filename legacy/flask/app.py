@@ -5,9 +5,14 @@ import hashlib
 import sqlite3
 import os
 import time
+from pathlib import Path
 from urllib.parse import urlparse
 
-app = Flask(__name__, static_folder='static', static_url_path='/static')
+BASE_DIR = Path(__file__).resolve().parent
+REPO_DIR = BASE_DIR.parents[1]
+WEBAPP_DIR = Path(os.environ.get('LINKWISE_WEBAPP_DIR', REPO_DIR / 'webapp'))
+
+app = Flask(__name__, static_folder=str(WEBAPP_DIR / 'static'), static_url_path='/static')
 
 DB_DIR = os.environ.get('LINKWISE_DB_DIR', 'data')
 DB_FILE = os.path.join(DB_DIR, 'bookmarks.db')
@@ -555,7 +560,7 @@ def get_webdav_config():
 
 @app.route('/')
 def index():
-    return send_from_directory('.', 'index.html')
+    return send_from_directory(str(WEBAPP_DIR), 'index.html')
 
 
 @app.route('/api/health', methods=['GET'])

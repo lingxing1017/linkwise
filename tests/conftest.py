@@ -13,13 +13,14 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-APP_FILE = ROOT / "app" / "app.py"
+APP_FILE = ROOT / "legacy" / "flask" / "app.py"
 PYTHON = ROOT / ".venv" / "bin" / "python"
 
 
 def load_app_module(db_dir, secret_file):
     os.environ["LINKWISE_DB_DIR"] = str(db_dir)
     os.environ["LINKWISE_SECRET_FILE"] = str(secret_file)
+    os.environ["LINKWISE_WEBAPP_DIR"] = str(ROOT / "webapp")
 
     module_name = f"linkwise_app_{uuid.uuid4().hex}"
     spec = importlib.util.spec_from_file_location(module_name, APP_FILE)
@@ -81,11 +82,12 @@ def live_server(tmp_path):
     env = os.environ.copy()
     env["LINKWISE_DB_DIR"] = str(tmp_path / "data")
     env["LINKWISE_SECRET_FILE"] = str(secret_file)
+    env["LINKWISE_WEBAPP_DIR"] = str(ROOT / "webapp")
     env["PORT"] = str(port)
 
     process = subprocess.Popen(
         [str(PYTHON), "app.py"],
-        cwd=ROOT / "app",
+        cwd=ROOT / "legacy" / "flask",
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,

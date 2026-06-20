@@ -4,7 +4,10 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir flask gunicorn cryptography
 
-COPY app/ /app/
+COPY legacy/flask/ /app/
+COPY webapp/ /app/webapp/
+
+ENV LINKWISE_WEBAPP_DIR=/app/webapp
 
 EXPOSE 7500
 
