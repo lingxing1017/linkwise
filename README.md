@@ -83,7 +83,7 @@ http://localhost:7500
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `LINKWISE_DB_DIR` | `data` | SQLite 数据库目录 |
+| `LINKWISE_DB_DIR` | `<project>/data` | SQLite 数据库目录 |
 | `LINKWISE_SECRET_FILE` | `/run/secrets/linkwise_secret_key` | WebDAV 密码加密密钥文件 |
 | `LINKWISE_VERSION` | `dev` | 应用版本号 |
 
@@ -92,7 +92,8 @@ http://localhost:7500
 ### 项目结构
 
 ```text
-app/        应用代码和前端资源
+src/        Flask 后端源码
+webapp/     静态前端资源
 data/       本地运行数据，默认不提交
 secrets/    本地密钥文件，默认不提交
 tests/      回归测试
@@ -112,7 +113,7 @@ python3 -m venv .venv
 本地运行开发服务：
 
 ```bash
-.venv/bin/python app/app.py
+.venv/bin/python src/app.py
 ```
 
 ### 运行测试
