@@ -59,6 +59,25 @@ wrangler d1 migrations apply linkwise-db --local
 wrangler dev
 ```
 
+## Cloudflare Dashboard 部署
+
+这个仓库可以按 Cloudflare Dashboard 的 Git 部署流程接入，形式上和常见的 npm/TypeScript Worker 仓库一致：
+
+```text
+Build command: npm run build
+Deploy command: npx wrangler deploy
+```
+
+`npm run build` 会调用 `scripts/build-worker.sh`。如果 Cloudflare 构建环境里没有 Rust，它会先安装最小 Rust toolchain，然后安装 `worker-build` 并生成 Worker 产物。
+
+Dashboard 部署前还需要完成这些配置：
+
+1. 在 Cloudflare 创建 D1 数据库。
+2. 确认 Worker 绑定了名为 `DB` 的 D1 database。
+3. 在 Worker 的 Variables and Secrets 里设置 `LINKWISE_SECRET`。
+
+Worker 会在第一次处理 API 请求时自动初始化 D1 schema。`migrations/0001_init.sql` 仍然保留，作为 schema 的显式记录和后续数据库变更的迁移基础。
+
 当前 Rust Worker 已迁移主要 API：
 
 ```text

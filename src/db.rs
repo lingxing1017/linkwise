@@ -7,12 +7,96 @@ use crate::models::{
     WebdavConfigPayload, WebdavConfigResponse,
 };
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 use url::Url;
 use worker::d1::{D1Database, D1Result, D1Type};
 use worker::*;
 
 pub const D1_BINDING: &str = "DB";
 const DEFAULT_WEBDAV_FILENAME: &str = "linkwise-bookmarks.html";
+const SCHEMA_VERSION_KEY: &str = "schema.version";
+const SCHEMA_VERSION: &str = "2026-06-19-initial";
+static SCHEMA_INITIALIZED: AtomicBool = AtomicBool::new(false);
+
+pub async fn initialize_schema(db: &D1Database) -> Result<()> {
+    if SCHEMA_INITIALIZED.load(Ordering::Relaxed) {
+        return Ok(());
+    }
+
+    db.prepare(
+        r#"
+        CREATE TABLE IF NOT EXISTS bookmarks (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL DEFAULT '',
+            url TEXT NOT NULL DEFAULT '',
+            folder TEXT NOT NULL DEFAULT '',
+            sort_order INTEGER NOT NULL DEFAULT 0
+        )
+        "#,
+    )
+    .run()
+    .await?;
+
+    db.prepare(
+        r#"
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_bookmarks_url
+        ON bookmarks (url)
+        "#,
+    )
+    .run()
+    .await?;
+
+    db.prepare(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_bookmarks_folder_order
+        ON bookmarks (folder, sort_order)
+        "#,
+    )
+    .run()
+    .await?;
+
+    db.prepare(
+        r#"
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL DEFAULT ''
+        )
+        "#,
+    )
+    .run()
+    .await?;
+
+    db.prepare(
+        r#"
+        CREATE TABLE IF NOT EXISTS folder_orders (
+            parent_folder TEXT NOT NULL DEFAULT '',
+            folder_name TEXT NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (parent_folder, folder_name)
+        )
+        "#,
+    )
+    .run()
+    .await?;
+
+    let version_args = [
+        D1Type::Text(SCHEMA_VERSION_KEY),
+        D1Type::Text(SCHEMA_VERSION),
+    ];
+    db.prepare(
+        r#"
+        INSERT OR REPLACE INTO settings (key, value)
+        VALUES (?, ?)
+        "#,
+    )
+    .bind_refs(&version_args)?
+    .run()
+    .await?;
+
+    SCHEMA_INITIALIZED.store(true, Ordering::Relaxed);
+
+    Ok(())
+}
 
 pub async fn all_bookmarks(db: &D1Database) -> Result<Vec<Bookmark>> {
     db.prepare(
