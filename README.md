@@ -2,7 +2,7 @@
 
 拾链是一个自托管书签管理工具，用于收藏、整理、导入和导出链接。
 
-当前 `worker-rust` 分支正在把后端从 Flask + SQLite 迁移到 Cloudflare Workers Rust + D1。前端仍然是非构建的静态页面，直接放在 `webapp/` 下由 Workers Static Assets 托管。
+当前后端运行在 Cloudflare Workers Rust + D1 上。前端仍然是非构建的静态页面，直接放在 `webapp/` 下由 Workers Static Assets 托管。
 
 ## 目标架构
 
@@ -18,10 +18,6 @@ Workers Static Assets
 src/              Rust Worker 后端源码
 webapp/           静态前端，无构建步骤
 migrations/       Cloudflare D1 数据库迁移
-legacy/flask/     旧 Flask 后端，迁移期保留作对照
-tests/            旧 Flask 回归测试，迁移期保留
-Dockerfile        旧 Flask 镜像构建，迁移期保留
-compose.yml       旧 Flask Docker Compose，迁移期保留
 wrangler.toml     Cloudflare Worker 配置
 Cargo.toml        Rust Worker 工程配置
 ```
@@ -80,10 +76,11 @@ Dashboard 部署前还需要完成这些配置：
 
 Worker 会在第一次处理 API 请求时自动初始化 D1 schema。`migrations/0001_init.sql` 仍然保留，作为 schema 的显式记录和后续数据库变更的迁移基础。
 
-当前 Rust Worker 已迁移主要 API：
+当前 Rust Worker 提供这些主要 API：
 
 ```text
 GET /api/health
+GET /api/bootstrap
 GET /api/bookmarks
 POST /api/bookmarks
 POST /api/bookmarks/bulk
@@ -103,27 +100,28 @@ POST /api/webdav/config
 
 WebDAV 配置已迁移到 D1。当前 Worker 版不会把 WebDAV 密码明文写入 D1；保存新密码时需要配置 `LINKWISE_SECRET`。
 
-## Legacy Flask
+## 测试
 
-迁移期间，旧 Flask 服务仍可作为对照运行：
-
-```bash
-python3 -m venv .venv
-.venv/bin/pip install flask cryptography pytest
-.venv/bin/python legacy/flask/app.py
-```
-
-旧服务默认仍使用本地 SQLite 和密钥文件：
-
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `LINKWISE_DB_DIR` | `data` | SQLite 数据库目录 |
-| `LINKWISE_SECRET_FILE` | `/run/secrets/linkwise_secret_key` | WebDAV 密码加密密钥文件 |
-| `LINKWISE_WEBAPP_DIR` | `webapp` | 静态前端目录 |
-| `LINKWISE_VERSION` | `dev` | 应用版本号 |
-
-运行旧 Flask 回归测试：
+基础构建验证：
 
 ```bash
-.venv/bin/python -m pytest
+cargo check
+npm run build
 ```
+
+后端 API 回归测试应针对运行中的 Worker 发 HTTP 请求，而不是再使用旧的进程内测试方式。先启动本地 Worker：
+
+```bash
+npm run dev
+```
+
+然后让测试请求本地 Worker，例如：
+
+```text
+http://127.0.0.1:8787/api/health
+http://127.0.0.1:8787/api/bootstrap
+```
+
+前端 E2E 测试仍然可以复用原来的思路：用 Playwright 打开运行中的 Worker 站点，通过 UI 创建、导入、移动、删除书签。区别是测试目标应改为本地 `wrangler dev` 或部署后的 Cloudflare Worker URL。
+
+为避免误伤生产数据，自动化测试应使用单独的 Cloudflare D1 测试库或本地 D1。
