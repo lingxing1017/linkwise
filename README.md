@@ -122,6 +122,20 @@ http://127.0.0.1:8787/api/health
 http://127.0.0.1:8787/api/bootstrap
 ```
 
+测试 fixture 默认启动 `wrangler dev`，并把本地 D1 状态持久化到 `data/`。`data/` 已被 `.gitignore` 忽略，不会提交到仓库。
+
+运行 API 回归测试：
+
+```bash
+.venv/bin/python -m pytest -m api
+```
+
+也可以指定一个已经部署好的测试环境：
+
+```bash
+LINKWISE_API_BASE_URL=https://your-test-worker.example.com .venv/bin/python -m pytest -m api
+```
+
 前端 E2E 测试仍然可以复用原来的思路：用 Playwright 打开运行中的 Worker 站点，通过 UI 创建、导入、移动、删除书签。区别是测试目标应改为本地 `wrangler dev` 或部署后的 Cloudflare Worker URL。
 
 为避免误伤生产数据，自动化测试应使用单独的 Cloudflare D1 测试库或本地 D1。

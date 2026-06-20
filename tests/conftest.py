@@ -1,11 +1,65 @@
+import json
 import os
 import socket
 import subprocess
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import pytest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+LOCAL_D1_DIR = ROOT / "data"
+
+
+class ApiResponse:
+    def __init__(self, status, headers, body):
+        self.status = status
+        self.headers = headers
+        self.body = body
+
+    def json(self):
+        return json.loads(self.body.decode("utf-8"))
+
+    def text(self):
+        return self.body.decode("utf-8")
+
+
+class ApiClient:
+    def __init__(self, base_url):
+        self.base_url = base_url.rstrip("/")
+
+    def request(self, method, path, payload=None, headers=None):
+        request_headers = dict(headers or {})
+        data = None
+
+        if payload is not None:
+            data = json.dumps(payload).encode("utf-8")
+            request_headers.setdefault("Content-Type", "application/json")
+
+        request = urllib.request.Request(
+            f"{self.base_url}{path}",
+            data=data,
+            headers=request_headers,
+            method=method,
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return ApiResponse(response.status, response.headers, response.read())
+        except urllib.error.HTTPError as exc:
+            return ApiResponse(exc.code, exc.headers, exc.read())
+
+    def get(self, path):
+        return self.request("GET", path)
+
+    def post(self, path, payload):
+        return self.request("POST", path, payload)
+
+    def delete(self, path):
+        return self.request("DELETE", path)
 
 
 def find_free_port():
@@ -33,6 +87,16 @@ def wait_for_server(url, timeout=30):
     raise RuntimeError(f"server did not start at {url}: {last_error}")
 
 
+def stop_process(process):
+    process.terminate()
+    try:
+        output, _ = process.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        output, _ = process.communicate(timeout=5)
+    return output
+
+
 @pytest.fixture(scope="session")
 def browser_name():
     return "chromium"
@@ -40,15 +104,30 @@ def browser_name():
 
 @pytest.fixture(scope="session")
 def live_server():
-    base_url = os.environ.get("LINKWISE_E2E_BASE_URL", "").strip().rstrip("/")
+    base_url = (
+        os.environ.get("LINKWISE_API_BASE_URL", "").strip()
+        or os.environ.get("LINKWISE_E2E_BASE_URL", "").strip()
+    ).rstrip("/")
     if base_url:
         wait_for_server(base_url)
         yield base_url
         return
 
+    LOCAL_D1_DIR.mkdir(parents=True, exist_ok=True)
     port = find_free_port()
     process = subprocess.Popen(
-        ["npm", "run", "dev", "--", "--ip", "127.0.0.1", "--port", str(port)],
+        [
+            "npm",
+            "run",
+            "dev",
+            "--",
+            "--ip",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--persist-to",
+            str(LOCAL_D1_DIR),
+        ],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -58,13 +137,17 @@ def live_server():
     try:
         wait_for_server(base_url)
         yield base_url
+    except RuntimeError as exc:
+        output = stop_process(process)
+        raise RuntimeError(f"{exc}\n\nwrangler dev output:\n{output}") from exc
     finally:
-        process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=5)
+        if process.poll() is None:
+            stop_process(process)
+
+
+@pytest.fixture
+def api_client(live_server):
+    return ApiClient(live_server)
 
 
 @pytest.fixture
