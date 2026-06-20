@@ -31,11 +31,11 @@ Cargo.toml        Rust Worker 工程配置
 安装依赖：
 
 ```bash
+npm install
 cargo install worker-build
-npm install -g wrangler
 ```
 
-创建 D1 数据库后，把 `wrangler.toml` 里的 `database_id` 替换成真实 ID：
+创建 D1 数据库：
 
 ```bash
 wrangler d1 create linkwise-db
@@ -56,7 +56,7 @@ wrangler d1 migrations apply linkwise-db --local
 本地运行 Worker：
 
 ```bash
-wrangler dev
+npm run dev
 ```
 
 ## Cloudflare Dashboard 部署
@@ -65,10 +65,12 @@ wrangler dev
 
 ```text
 Build command: npm run build
-Deploy command: npx wrangler deploy
+Deploy command: npm run deploy
 ```
 
 `npm run build` 会调用 `scripts/build-worker.sh`。如果 Cloudflare 构建环境里没有 Rust，它会先安装最小 Rust toolchain，然后安装 `worker-build` 并生成 Worker 产物。
+
+Dashboard 的 Deploy command 使用 `npm run deploy`，只部署 Build command 生成的产物，避免 `wrangler deploy` 再触发一次 Rust 构建。本地需要一键构建并部署时可以运行 `npm run deploy:full`。
 
 Dashboard 部署前还需要完成这些配置：
 

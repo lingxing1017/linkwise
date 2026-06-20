@@ -1,0 +1,25 @@
+{
+  "name": "linkwise",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bash scripts/build-worker.sh",
+    "check": "cargo check",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --no-bundle",
+    "deploy:full": "npm run build && npm run deploy"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DB": {
+        "description": "D1 database for storing bookmarks and settings"
+      },
+      "LINKWISE_SECRET": {
+        "description": "Secret used to protect stored WebDAV passwords"
+      }
+    }
+  },
+  "devDependencies": {
+    "wrangler": "^4.26.0"
+  }
+}
