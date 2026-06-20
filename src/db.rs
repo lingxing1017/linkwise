@@ -9,7 +9,10 @@ use crate::models::{
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use url::Url;
-use worker::d1::{D1Database, D1PreparedArgument as WorkerD1PreparedArgument, D1Result, D1Type};
+use worker::d1::{
+    D1Database, D1PreparedArgument as WorkerD1PreparedArgument, D1PreparedStatement, D1Result,
+    D1Type,
+};
 use worker::*;
 
 pub const D1_BINDING: &str = "DB";
@@ -369,6 +372,100 @@ async fn insert_folder_orders_batch(
     Ok(())
 }
 
+async fn update_bookmark_sort_orders_batch(db: &D1Database, ordered_ids: &[String]) -> Result<()> {
+    let prepared = db.prepare("UPDATE bookmarks SET sort_order = ? WHERE id = ?");
+    let mut statements = Vec::new();
+
+    for (sort_order, id) in ordered_ids.iter().enumerate() {
+        let args = [D1Type::Integer(sort_order as i32), D1Type::Text(id)];
+        statements.push(prepared.bind_refs(&args)?);
+    }
+
+    run_statement_batches(db, statements, 2).await
+}
+
+async fn update_folder_sort_orders_batch(
+    db: &D1Database,
+    parent_folder: &str,
+    ordered_names: &[String],
+) -> Result<()> {
+    let prepared = db.prepare(
+        r#"
+        INSERT OR REPLACE INTO folder_orders (parent_folder, folder_name, sort_order)
+        VALUES (?, ?, ?)
+        "#,
+    );
+    let mut statements = Vec::new();
+
+    for (sort_order, name) in ordered_names.iter().enumerate() {
+        let args = [
+            D1Type::Text(parent_folder),
+            D1Type::Text(name),
+            D1Type::Integer(sort_order as i32),
+        ];
+        statements.push(prepared.bind_refs(&args)?);
+    }
+
+    run_statement_batches(db, statements, 3).await
+}
+
+async fn update_bookmark_folders_batch(
+    db: &D1Database,
+    updates: &[(String, String)],
+) -> Result<usize> {
+    let prepared = db.prepare("UPDATE bookmarks SET folder = ? WHERE id = ?");
+    let mut statements = Vec::new();
+
+    for (id, folder) in updates {
+        let args = [D1Type::Text(folder), D1Type::Text(id)];
+        statements.push(prepared.bind_refs(&args)?);
+    }
+
+    let mut updated_count = 0;
+    for result in run_statement_batches_with_results(db, statements, 2).await? {
+        updated_count += result_changes(&result)?;
+    }
+
+    Ok(updated_count)
+}
+
+async fn delete_folder_order_rows_batch(db: &D1Database, rows: &[(String, String)]) -> Result<()> {
+    let prepared =
+        db.prepare("DELETE FROM folder_orders WHERE parent_folder = ? AND folder_name = ?");
+    let mut statements = Vec::new();
+
+    for (parent_folder, folder_name) in rows {
+        let args = [D1Type::Text(parent_folder), D1Type::Text(folder_name)];
+        statements.push(prepared.bind_refs(&args)?);
+    }
+
+    run_statement_batches(db, statements, 2).await
+}
+
+async fn upsert_folder_order_rows_batch(
+    db: &D1Database,
+    rows: &[(String, String, i64)],
+) -> Result<()> {
+    let prepared = db.prepare(
+        r#"
+        INSERT OR REPLACE INTO folder_orders (parent_folder, folder_name, sort_order)
+        VALUES (?, ?, ?)
+        "#,
+    );
+    let mut statements = Vec::new();
+
+    for (parent_folder, folder_name, sort_order) in rows {
+        let args = [
+            D1Type::Text(parent_folder),
+            D1Type::Text(folder_name),
+            D1Type::Integer(*sort_order as i32),
+        ];
+        statements.push(prepared.bind_refs(&args)?);
+    }
+
+    run_statement_batches(db, statements, 3).await
+}
+
 fn collect_missing_folder_orders(
     folder: &str,
     existing_folder_orders: &mut HashSet<(String, String)>,
@@ -402,6 +499,32 @@ fn prepared_args<'a>(values: &'a [D1Type<'a>]) -> Vec<WorkerD1PreparedArgument<'
     values.iter().map(WorkerD1PreparedArgument::new).collect()
 }
 
+async fn run_statement_batches(
+    db: &D1Database,
+    statements: Vec<D1PreparedStatement>,
+    binds_per_statement: usize,
+) -> Result<()> {
+    for chunk in statements.chunks(sql_chunk_size(binds_per_statement, 0)) {
+        db.batch(chunk.to_vec()).await?;
+    }
+
+    Ok(())
+}
+
+async fn run_statement_batches_with_results(
+    db: &D1Database,
+    statements: Vec<D1PreparedStatement>,
+    binds_per_statement: usize,
+) -> Result<Vec<D1Result>> {
+    let mut results = Vec::new();
+
+    for chunk in statements.chunks(sql_chunk_size(binds_per_statement, 0)) {
+        results.extend(db.batch(chunk.to_vec()).await?);
+    }
+
+    Ok(results)
+}
+
 fn repeat_row_placeholders(row_count: usize, binds_per_row: usize) -> String {
     let row = format!("({})", vec!["?"; binds_per_row].join(", "));
     vec![row; row_count].join(", ")
@@ -424,6 +547,8 @@ pub async fn move_bookmarks(
     ensure_folder_order(db, &folder).await?;
     let next_order = next_bookmark_sort_order(db, &folder).await?;
     let mut moved_count = 0;
+    let prepared = db.prepare("UPDATE bookmarks SET folder = ?, sort_order = ? WHERE id = ?");
+    let mut statements = Vec::new();
 
     for (index, id) in ids.iter().enumerate() {
         let sort_order = next_order + index as i64;
@@ -432,11 +557,10 @@ pub async fn move_bookmarks(
             D1Type::Integer(sort_order as i32),
             D1Type::Text(id),
         ];
-        let result = db
-            .prepare("UPDATE bookmarks SET folder = ?, sort_order = ? WHERE id = ?")
-            .bind_refs(&args)?
-            .run()
-            .await?;
+        statements.push(prepared.bind_refs(&args)?);
+    }
+
+    for result in run_statement_batches_with_results(db, statements, 3).await? {
         moved_count += result_changes(&result)?;
     }
 
@@ -470,13 +594,7 @@ pub async fn reorder_bookmarks(
         }
     }
 
-    for (sort_order, id) in ordered_ids.iter().enumerate() {
-        let args = [D1Type::Integer(sort_order as i32), D1Type::Text(id)];
-        db.prepare("UPDATE bookmarks SET sort_order = ? WHERE id = ?")
-            .bind_refs(&args)?
-            .run()
-            .await?;
-    }
+    update_bookmark_sort_orders_batch(db, &ordered_ids).await?;
 
     Ok(ReorderBookmarksResponse {
         status: "success",
@@ -498,14 +616,19 @@ pub async fn delete_bookmarks(
         )));
     }
 
-    let placeholders = placeholders(ids.len());
-    let query = format!("DELETE FROM bookmarks WHERE id IN ({placeholders})");
-    let args = ids.iter().map(|id| D1Type::Text(id)).collect::<Vec<_>>();
-    let result = db.prepare(query).bind_refs(&args)?.run().await?;
+    let mut deleted_count = 0;
+
+    for chunk in ids.chunks(sql_chunk_size(1, 0)) {
+        let placeholders = placeholders(chunk.len());
+        let query = format!("DELETE FROM bookmarks WHERE id IN ({placeholders})");
+        let args = chunk.iter().map(|id| D1Type::Text(id)).collect::<Vec<_>>();
+        let result = db.prepare(query).bind_refs(&args)?.run().await?;
+        deleted_count += result_changes(&result)?;
+    }
 
     Ok(Ok(DeleteBookmarksResponse {
         status: "success",
-        deleted_count: result_changes(&result)?,
+        deleted_count,
     }))
 }
 
@@ -551,22 +674,7 @@ pub async fn reorder_folders(
         }
     }
 
-    for (sort_order, name) in ordered_names.iter().enumerate() {
-        let args = [
-            D1Type::Text(&parent_folder),
-            D1Type::Text(name),
-            D1Type::Integer(sort_order as i32),
-        ];
-        db.prepare(
-            r#"
-            INSERT OR REPLACE INTO folder_orders (parent_folder, folder_name, sort_order)
-            VALUES (?, ?, ?)
-            "#,
-        )
-        .bind_refs(&args)?
-        .run()
-        .await?;
-    }
+    update_folder_sort_orders_batch(db, &parent_folder, &ordered_names).await?;
 
     Ok(ReorderFoldersResponse {
         status: "success",
@@ -591,19 +699,15 @@ pub async fn move_folder_up(
     let parts = split_folder_path(&folder);
     let parent_folder = parts[..parts.len().saturating_sub(1)].join(" / ");
     let rows = bookmark_folder_rows_in_branch(db, &folder).await?;
-    let mut moved_count = 0;
+    let mut updates = Vec::new();
 
     for row in rows {
         let Some(new_folder) = move_folder_path_up(&row.folder, &folder, &parent_folder) else {
             continue;
         };
-        let args = [D1Type::Text(&new_folder), D1Type::Text(&row.id)];
-        db.prepare("UPDATE bookmarks SET folder = ? WHERE id = ?")
-            .bind_refs(&args)?
-            .run()
-            .await?;
-        moved_count += 1;
+        updates.push((row.id, new_folder));
     }
+    let moved_count = update_bookmark_folders_batch(db, &updates).await?;
 
     sync_folder_order_move_up(db, &folder, &parent_folder).await?;
 
@@ -637,7 +741,7 @@ pub async fn rename_folder(
     }
 
     let rows = bookmark_folder_rows_in_branch(db, &folder).await?;
-    let mut renamed_count = 0;
+    let mut updates = Vec::new();
 
     for row in rows {
         let updated_folder = replace_folder_path(&row.folder, &folder, &new_folder);
@@ -646,13 +750,9 @@ pub async fn rename_folder(
             continue;
         }
 
-        let args = [D1Type::Text(&updated_folder), D1Type::Text(&row.id)];
-        db.prepare("UPDATE bookmarks SET folder = ? WHERE id = ?")
-            .bind_refs(&args)?
-            .run()
-            .await?;
-        renamed_count += 1;
+        updates.push((row.id, updated_folder));
     }
+    let renamed_count = update_bookmark_folders_batch(db, &updates).await?;
 
     sync_folder_order_rename(db, &folder, &new_folder).await?;
 
@@ -908,6 +1008,8 @@ async fn all_folder_order_rows(db: &D1Database) -> Result<Vec<FolderOrder>> {
 
 async fn sync_folder_order_rename(db: &D1Database, folder: &str, new_folder: &str) -> Result<()> {
     let rows = all_folder_order_rows(db).await?;
+    let mut rows_to_delete = Vec::new();
+    let mut rows_to_upsert = Vec::new();
 
     for row in rows {
         let current_path = join_folder_path(&row.parent_folder, &row.folder_name);
@@ -917,7 +1019,7 @@ async fn sync_folder_order_rename(db: &D1Database, folder: &str, new_folder: &st
             continue;
         }
 
-        delete_folder_order_row(db, &row.parent_folder, &row.folder_name).await?;
+        rows_to_delete.push((row.parent_folder, row.folder_name));
         let updated_parts = split_folder_path(&updated_path);
 
         if updated_parts.is_empty() {
@@ -926,24 +1028,27 @@ async fn sync_folder_order_rename(db: &D1Database, folder: &str, new_folder: &st
 
         let updated_parent = updated_parts[..updated_parts.len() - 1].join(" / ");
         let updated_name = updated_parts.last().cloned().unwrap_or_default();
-        insert_folder_order_row(db, &updated_parent, &updated_name, row.sort_order).await?;
+        rows_to_upsert.push((updated_parent, updated_name, row.sort_order));
     }
 
+    delete_folder_order_rows_batch(db, &rows_to_delete).await?;
+    upsert_folder_order_rows_batch(db, &rows_to_upsert).await?;
     ensure_folder_order(db, new_folder).await
 }
 
 async fn delete_folder_order_branch(db: &D1Database, folder: &str) -> Result<()> {
     let rows = all_folder_order_rows(db).await?;
+    let mut rows_to_delete = Vec::new();
 
     for row in rows {
         let current_path = join_folder_path(&row.parent_folder, &row.folder_name);
 
         if current_path == folder || current_path.starts_with(&folder_child_prefix(folder)) {
-            delete_folder_order_row(db, &row.parent_folder, &row.folder_name).await?;
+            rows_to_delete.push((row.parent_folder, row.folder_name));
         }
     }
 
-    Ok(())
+    delete_folder_order_rows_batch(db, &rows_to_delete).await
 }
 
 async fn sync_folder_order_move_up(
@@ -952,12 +1057,14 @@ async fn sync_folder_order_move_up(
     parent_folder: &str,
 ) -> Result<()> {
     let rows = all_folder_order_rows(db).await?;
+    let mut rows_to_delete = Vec::new();
+    let mut rows_to_upsert = Vec::new();
 
     for row in rows {
         let current_path = join_folder_path(&row.parent_folder, &row.folder_name);
 
         if current_path == folder {
-            delete_folder_order_row(db, &row.parent_folder, &row.folder_name).await?;
+            rows_to_delete.push((row.parent_folder, row.folder_name));
             continue;
         }
 
@@ -968,7 +1075,7 @@ async fn sync_folder_order_move_up(
         let suffix = &current_path[folder_child_prefix(folder).len()..];
         let updated_path = join_folder_path(parent_folder, suffix);
         let updated_parts = split_folder_path(&updated_path);
-        delete_folder_order_row(db, &row.parent_folder, &row.folder_name).await?;
+        rows_to_delete.push((row.parent_folder, row.folder_name));
 
         if updated_parts.is_empty() {
             continue;
@@ -976,46 +1083,11 @@ async fn sync_folder_order_move_up(
 
         let updated_parent = updated_parts[..updated_parts.len() - 1].join(" / ");
         let updated_name = updated_parts.last().cloned().unwrap_or_default();
-        insert_folder_order_row(db, &updated_parent, &updated_name, row.sort_order).await?;
+        rows_to_upsert.push((updated_parent, updated_name, row.sort_order));
     }
 
-    Ok(())
-}
-
-async fn delete_folder_order_row(
-    db: &D1Database,
-    parent_folder: &str,
-    folder_name: &str,
-) -> Result<()> {
-    let args = [D1Type::Text(parent_folder), D1Type::Text(folder_name)];
-    db.prepare("DELETE FROM folder_orders WHERE parent_folder = ? AND folder_name = ?")
-        .bind_refs(&args)?
-        .run()
-        .await?;
-    Ok(())
-}
-
-async fn insert_folder_order_row(
-    db: &D1Database,
-    parent_folder: &str,
-    folder_name: &str,
-    sort_order: i64,
-) -> Result<()> {
-    let args = [
-        D1Type::Text(parent_folder),
-        D1Type::Text(folder_name),
-        D1Type::Integer(sort_order as i32),
-    ];
-    db.prepare(
-        r#"
-        INSERT OR REPLACE INTO folder_orders (parent_folder, folder_name, sort_order)
-        VALUES (?, ?, ?)
-        "#,
-    )
-    .bind_refs(&args)?
-    .run()
-    .await?;
-    Ok(())
+    delete_folder_order_rows_batch(db, &rows_to_delete).await?;
+    upsert_folder_order_rows_batch(db, &rows_to_upsert).await
 }
 
 fn replace_folder_path(folder_path: &str, old_prefix: &str, new_prefix: &str) -> String {
