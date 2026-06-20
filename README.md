@@ -41,6 +41,12 @@ npm install -g wrangler
 wrangler d1 create linkwise-db
 ```
 
+设置用于保护 WebDAV 密码的 Worker secret：
+
+```bash
+wrangler secret put LINKWISE_SECRET
+```
+
 应用数据库迁移：
 
 ```bash
@@ -53,13 +59,28 @@ wrangler d1 migrations apply linkwise-db --local
 wrangler dev
 ```
 
-当前 Rust Worker 骨架已提供：
+当前 Rust Worker 已迁移主要 API：
 
 ```text
 GET /api/health
+GET /api/bookmarks
+POST /api/bookmarks
+POST /api/bookmarks/bulk
+POST /api/bookmarks/move
+POST /api/bookmarks/reorder
+POST /api/bookmarks/delete
+DELETE /api/bookmarks/:id
+GET /api/folder-orders
+POST /api/folders/reorder
+POST /api/folders/move-up
+POST /api/folders/rename
+POST /api/folders/delete
+GET /api/bookmarks/export
+GET /api/webdav/config
+POST /api/webdav/config
 ```
 
-其余 API 会按旧 Flask 行为逐步迁移到 D1。
+WebDAV 配置已迁移到 D1。当前 Worker 版不会把 WebDAV 密码明文写入 D1；保存新密码时需要配置 `LINKWISE_SECRET`。
 
 ## Legacy Flask
 

@@ -1,7 +1,7 @@
 use crate::models::{
-    BookmarkPayload, BulkBookmarksPayload, ErrorResponse, FolderPayload, HealthResponse,
-    IdsPayload, MoveBookmarksPayload, RenameFolderPayload, ReorderBookmarksPayload,
-    ReorderFoldersPayload,
+    BookmarkPayload, BulkBookmarksPayload, FolderPayload, HealthResponse, IdsPayload,
+    MoveBookmarksPayload, RenameFolderPayload, ReorderBookmarksPayload, ReorderFoldersPayload,
+    WebdavConfigPayload,
 };
 use crate::{db, export};
 use worker::*;
@@ -118,16 +118,26 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
             )?;
             Ok(Response::from_html(html)?.with_headers(headers))
         })
-        .get_async("/api/webdav/config", |_req, _ctx| async move {
-            not_implemented("GET /api/webdav/config is pending the Worker secret migration")
+        .get_async("/api/webdav/config", |_req, ctx| async move {
+            let db = ctx.env.d1(db::D1_BINDING)?;
+            Response::from_json(&db::webdav_config(&db).await?)
+        })
+        .post_async("/api/webdav/config", |mut req, ctx| async move {
+            let db = ctx.env.d1(db::D1_BINDING)?;
+            let secret = ctx
+                .env
+                .secret(crate::crypto::SECRET_BINDING)
+                .ok()
+                .map(|value| value.to_string());
+            let payload = req.json::<WebdavConfigPayload>().await.unwrap_or_default();
+
+            match db::update_webdav_config(&db, payload, secret).await? {
+                Ok(response) => Response::from_json(&response),
+                Err((status, body)) => json_with_status(&body, status),
+            }
         })
         .run(req, env)
         .await
-}
-
-fn not_implemented(message: &str) -> Result<Response> {
-    let response = Response::from_json(&ErrorResponse::new(message))?.with_status(501);
-    Ok(response)
 }
 
 fn json_with_status(value: &serde_json::Value, status: u16) -> Result<Response> {

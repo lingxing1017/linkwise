@@ -3,7 +3,8 @@ use crate::models::{
     CountValue, DeleteBookmarksResponse, DeleteFolderResponse, DuplicateBookmarkResponse,
     FolderOrder, FolderPayload, IdsPayload, MoveBookmarksPayload, MoveBookmarksResponse,
     MoveFolderUpResponse, RenameFolderPayload, RenameFolderResponse, ReorderBookmarksPayload,
-    ReorderBookmarksResponse, ReorderFoldersPayload, ReorderFoldersResponse,
+    ReorderBookmarksResponse, ReorderFoldersPayload, ReorderFoldersResponse, WebdavConfig,
+    WebdavConfigPayload, WebdavConfigResponse,
 };
 use std::collections::{HashMap, HashSet};
 use url::Url;
@@ -11,6 +12,7 @@ use worker::d1::{D1Database, D1Result, D1Type};
 use worker::*;
 
 pub const D1_BINDING: &str = "DB";
+const DEFAULT_WEBDAV_FILENAME: &str = "linkwise-bookmarks.html";
 
 pub async fn all_bookmarks(db: &D1Database) -> Result<Vec<Bookmark>> {
     db.prepare(
@@ -513,6 +515,74 @@ pub async fn delete_folder(
     }))
 }
 
+pub async fn webdav_config(db: &D1Database) -> Result<WebdavConfigResponse> {
+    Ok(WebdavConfigResponse {
+        status: "success",
+        config: build_webdav_config(get_settings(db, WEBDAV_SETTING_KEYS).await?),
+    })
+}
+
+pub async fn update_webdav_config(
+    db: &D1Database,
+    payload: WebdavConfigPayload,
+    secret: Option<String>,
+) -> Result<Result<WebdavConfigResponse, (u16, serde_json::Value)>> {
+    let filename = payload
+        .filename
+        .unwrap_or_else(|| DEFAULT_WEBDAV_FILENAME.to_string())
+        .trim()
+        .to_string();
+    let filename = if filename.is_empty() {
+        DEFAULT_WEBDAV_FILENAME.to_string()
+    } else {
+        filename
+    };
+    let password = payload.password.unwrap_or_default();
+    let mut values = vec![
+        (
+            "webdav_url".to_string(),
+            payload.webdav_url.unwrap_or_default().trim().to_string(),
+        ),
+        (
+            "webdav_username".to_string(),
+            payload.username.unwrap_or_default().trim().to_string(),
+        ),
+        (
+            "webdav_remote_dir".to_string(),
+            payload.remote_dir.unwrap_or_default().trim().to_string(),
+        ),
+        ("webdav_filename".to_string(), filename),
+    ];
+
+    if !password.is_empty() {
+        let Some(secret) = secret.filter(|value| !value.trim().is_empty()) else {
+            return Ok(Err((
+                500,
+                serde_json::to_value(crate::models::ErrorResponse::new(
+                    "未配置 LINKWISE_SECRET，无法保存 WebDAV 密码",
+                ))?,
+            )));
+        };
+
+        values.push((
+            "webdav_password_ciphertext".to_string(),
+            crate::crypto::protect_webdav_password(&password, &secret),
+        ));
+        values.push((
+            "webdav_password_nonce".to_string(),
+            "sha256-worker-secret-v1".to_string(),
+        ));
+    }
+
+    save_settings(db, &values).await?;
+
+    if !password.is_empty() {
+        delete_settings(db, &["webdav_password"]).await?;
+    }
+
+    webdav_config(db).await.map(Ok)
+}
+
 #[derive(serde::Deserialize)]
 struct ExistingBookmarkOrder {
     folder: String,
@@ -807,6 +877,110 @@ fn result_changes(result: &D1Result) -> Result<usize> {
         .meta()?
         .and_then(|meta| meta.changes)
         .unwrap_or_default())
+}
+
+const WEBDAV_SETTING_KEYS: &[&str] = &[
+    "webdav_url",
+    "webdav_username",
+    "webdav_password",
+    "webdav_password_ciphertext",
+    "webdav_password_nonce",
+    "webdav_remote_dir",
+    "webdav_filename",
+];
+
+#[derive(serde::Deserialize)]
+struct SettingRow {
+    key: String,
+    value: String,
+}
+
+async fn get_settings(db: &D1Database, keys: &[&str]) -> Result<HashMap<String, String>> {
+    if keys.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let query = format!(
+        "SELECT key, value FROM settings WHERE key IN ({})",
+        placeholders(keys.len())
+    );
+    let args = keys.iter().map(|key| D1Type::Text(key)).collect::<Vec<_>>();
+    let rows = db
+        .prepare(query)
+        .bind_refs(&args)?
+        .all()
+        .await?
+        .results::<SettingRow>()?;
+
+    Ok(rows.into_iter().map(|row| (row.key, row.value)).collect())
+}
+
+async fn save_settings(db: &D1Database, values: &[(String, String)]) -> Result<()> {
+    for (key, value) in values {
+        let args = [D1Type::Text(key), D1Type::Text(value)];
+        db.prepare(
+            r#"
+            INSERT OR REPLACE INTO settings (key, value)
+            VALUES (?, ?)
+            "#,
+        )
+        .bind_refs(&args)?
+        .run()
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn delete_settings(db: &D1Database, keys: &[&str]) -> Result<()> {
+    if keys.is_empty() {
+        return Ok(());
+    }
+
+    let query = format!(
+        "DELETE FROM settings WHERE key IN ({})",
+        placeholders(keys.len())
+    );
+    let args = keys.iter().map(|key| D1Type::Text(key)).collect::<Vec<_>>();
+    db.prepare(query).bind_refs(&args)?.run().await?;
+    Ok(())
+}
+
+fn build_webdav_config(settings: HashMap<String, String>) -> WebdavConfig {
+    let has_encrypted_password = settings
+        .get("webdav_password_ciphertext")
+        .filter(|value| !value.is_empty())
+        .is_some()
+        && settings
+            .get("webdav_password_nonce")
+            .filter(|value| !value.is_empty())
+            .is_some();
+    let has_legacy_password = settings
+        .get("webdav_password")
+        .filter(|value| !value.is_empty())
+        .is_some();
+
+    WebdavConfig {
+        webdav_url: settings.get("webdav_url").cloned().unwrap_or_default(),
+        username: settings.get("webdav_username").cloned().unwrap_or_default(),
+        remote_dir: settings
+            .get("webdav_remote_dir")
+            .cloned()
+            .unwrap_or_default(),
+        filename: settings
+            .get("webdav_filename")
+            .filter(|value| !value.is_empty())
+            .cloned()
+            .unwrap_or_else(|| DEFAULT_WEBDAV_FILENAME.to_string()),
+        has_password: has_encrypted_password || has_legacy_password,
+        password_security: if has_encrypted_password {
+            "worker_secret_hash"
+        } else if has_legacy_password {
+            "legacy_plaintext"
+        } else {
+            "empty"
+        },
+    }
 }
 
 async fn ensure_folder_order(db: &D1Database, folder: &str) -> Result<()> {
