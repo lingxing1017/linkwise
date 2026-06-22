@@ -49,7 +49,10 @@ window.openSettings = async function() {
     closeFloatingMenu();
 
     try {
-        await loadWebdavConfig();
+        await Promise.all([
+            loadWebdavConfig(),
+            loadAuthManagement()
+        ]);
     } catch (err) {
         console.error('获取设置失败:', err);
         await showMessage(`获取设置失败：${err.message}`, '设置');

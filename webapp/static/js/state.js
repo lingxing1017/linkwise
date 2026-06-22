@@ -50,6 +50,8 @@ const webdavUsernameInput = document.getElementById('webdav-username');
 const webdavPasswordInput = document.getElementById('webdav-password');
 const webdavRemoteDirInput = document.getElementById('webdav-remote-dir');
 const webdavFilenameInput = document.getElementById('webdav-filename');
+const authPasskeyList = document.getElementById('auth-passkey-list');
+const authSessionList = document.getElementById('auth-session-list');
 
 const API_BASE = 'api';
 const ALL_BOOKMARKS_VIEW = '__ALL__';

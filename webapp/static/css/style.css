@@ -536,6 +536,80 @@ body.readonly-mode .brand-settings-btn {
     box-shadow: 0 8px 20px rgba(79, 124, 255, 0.2);
 }
 
+.auth-management-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.auth-list-block {
+    margin-top: 14px;
+}
+
+.auth-list-title {
+    margin-bottom: 8px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.auth-list {
+    display: grid;
+    gap: 8px;
+}
+
+.auth-list-item {
+    min-height: 52px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+}
+
+.auth-list-item.muted {
+    opacity: 0.62;
+}
+
+.auth-list-name {
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.auth-list-meta,
+.auth-empty {
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.auth-empty {
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.auth-pill {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    margin-left: 6px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 11px;
+    padding: 0 7px;
+}
+
+.auth-pill.muted {
+    background: var(--hover);
+    color: var(--muted);
+}
+
 .topbar-more-btn {
     width: 46px;
     height: 46px;
