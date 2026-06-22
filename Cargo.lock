@@ -345,9 +345,11 @@ dependencies = [
  "console_error_panic_hook",
  "js-sys",
  "serde",
+ "serde-wasm-bindgen",
  "serde_json",
  "sha2",
  "url",
+ "wasm-bindgen-futures",
  "worker",
  "worker-macros",
 ]

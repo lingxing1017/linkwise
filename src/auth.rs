@@ -10,6 +10,7 @@ use worker::*;
 pub const ADMIN_SESSION_COOKIE: &str = "linkwise_admin_session";
 pub const AUTH_ORIGIN_BINDING: &str = "LINKWISE_AUTH_ORIGIN";
 pub const AUTH_RP_ID_BINDING: &str = "LINKWISE_AUTH_RP_ID";
+pub const SETUP_TOKEN_BINDING: &str = "LINKWISE_SETUP_TOKEN";
 pub const SETUP_COMPLETED_KEY: &str = "auth.setup_completed";
 pub const SETUP_COMPLETED_AT_KEY: &str = "auth.setup_completed_at";
 pub const PURPOSE_PASSKEY_REGISTRATION: &str = "passkey_registration";
@@ -143,6 +144,44 @@ pub fn base64url_encode(bytes: &[u8]) -> String {
     }
 
     output
+}
+
+pub fn base64url_decode(value: &str) -> Result<Vec<u8>> {
+    let mut output = Vec::with_capacity(value.len() * 3 / 4);
+    let mut buffer = 0u32;
+    let mut bit_count = 0u8;
+
+    for byte in value.bytes() {
+        let Some(bits) = base64url_value(byte) else {
+            if byte == b'=' {
+                break;
+            }
+
+            return Err(Error::RustError("invalid base64url input".to_string()));
+        };
+
+        buffer = (buffer << 6) | bits as u32;
+        bit_count += 6;
+
+        while bit_count >= 8 {
+            bit_count -= 8;
+            output.push((buffer >> bit_count) as u8);
+            buffer &= (1 << bit_count) - 1;
+        }
+    }
+
+    Ok(output)
+}
+
+fn base64url_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'A'..=b'Z' => Some(byte - b'A'),
+        b'a'..=b'z' => Some(byte - b'a' + 26),
+        b'0'..=b'9' => Some(byte - b'0' + 52),
+        b'-' => Some(62),
+        b'_' => Some(63),
+        _ => None,
+    }
 }
 
 fn random_bytes(byte_len: u32) -> Result<Vec<u8>> {

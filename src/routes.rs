@@ -1,16 +1,106 @@
 use crate::models::{
-    BookmarkPayload, BulkBookmarksPayload, FolderPayload, HealthResponse, IdsPayload,
-    MoveBookmarksPayload, RenameFolderPayload, ReorderBookmarksPayload, ReorderFoldersPayload,
-    WebdavConfigPayload,
+    BookmarkPayload, BulkBookmarksPayload, ErrorResponse, FolderPayload, HealthResponse,
+    IdsPayload, MoveBookmarksPayload, RenameFolderPayload, ReorderBookmarksPayload,
+    ReorderFoldersPayload, WebdavConfigPayload,
 };
-use crate::{db, export};
+use crate::{auth, db, export, webauthn};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 use worker::d1::D1Database;
 use worker::*;
+
+const AUTH_CHALLENGE_TTL_SECONDS: i64 = 5 * 60;
 
 pub async fn handle(req: Request, env: Env) -> Result<Response> {
     Router::new()
         .get_async("/api/health", |_req, _ctx| async move {
             Response::from_json(&HealthResponse::success())
+        })
+        .get_async("/api/auth/status", |req, ctx| async move {
+            let db = initialized_db(&ctx.env).await?;
+            let auth_config = auth::auth_config(&ctx.env, &req)?;
+            let admin_initialized = auth::is_setup_completed(&db).await?
+                || auth::count_admin_credentials(&db).await? > 0;
+            let session = auth::require_admin_session(&db, &req).await.ok();
+
+            Response::from_json(&AuthStatusResponse {
+                public_read: true,
+                admin_initialized,
+                admin_unlocked: session.is_some(),
+                admin_session_expires_at: session.map(|session| session.expires_at),
+                auth_configured: auth_config.configured,
+                missing_config: auth_config.missing_config,
+            })
+        })
+        .post_async(
+            "/api/auth/passkey/register/options",
+            |mut req, ctx| async move {
+                let db = initialized_db(&ctx.env).await?;
+                let payload = req
+                    .json::<PasskeyRegisterOptionsPayload>()
+                    .await
+                    .unwrap_or_default();
+
+                match passkey_register_options(&db, &req, &ctx.env, payload).await {
+                    Ok(Ok(response)) => Response::from_json(&response),
+                    Ok(Err((status, body))) => json_with_status(&body, status),
+                    Err(error) => Err(error),
+                }
+            },
+        )
+        .post_async(
+            "/api/auth/passkey/register/verify",
+            |mut req, ctx| async move {
+                let db = initialized_db(&ctx.env).await?;
+                let payload = req
+                    .json::<PasskeyRegisterVerifyPayload>()
+                    .await
+                    .unwrap_or_default();
+
+                match passkey_register_verify(&db, &req, &ctx.env, payload).await {
+                    Ok(Ok((response, cookie))) => json_with_cookie(&response, &cookie),
+                    Ok(Err((status, body))) => json_with_status(&body, status),
+                    Err(error) => Err(error),
+                }
+            },
+        )
+        .post_async("/api/auth/passkey/login/options", |req, ctx| async move {
+            let db = initialized_db(&ctx.env).await?;
+
+            match passkey_login_options(&db, &req, &ctx.env).await {
+                Ok(Ok(response)) => Response::from_json(&response),
+                Ok(Err((status, body))) => json_with_status(&body, status),
+                Err(error) => Err(error),
+            }
+        })
+        .post_async(
+            "/api/auth/passkey/login/verify",
+            |mut req, ctx| async move {
+                let db = initialized_db(&ctx.env).await?;
+                let payload = req
+                    .json::<PasskeyLoginVerifyPayload>()
+                    .await
+                    .unwrap_or_default();
+
+                match passkey_login_verify(&db, &req, &ctx.env, payload).await {
+                    Ok(Ok((response, cookie))) => json_with_cookie(&response, &cookie),
+                    Ok(Err((status, body))) => json_with_status(&body, status),
+                    Err(error) => Err(error),
+                }
+            },
+        )
+        .post_async("/api/auth/logout", |req, ctx| async move {
+            let db = initialized_db(&ctx.env).await?;
+            let config = auth::auth_config(&ctx.env, &req)?;
+
+            if let Ok(session) = auth::require_admin_session(&db, &req).await {
+                auth::revoke_admin_session(&db, &session.id, auth::now_timestamp()).await?;
+            }
+
+            json_with_cookie(
+                &json!({"ok": true, "admin_unlocked": false}),
+                &auth::clear_session_cookie(&config),
+            )
         })
         .get_async("/api/bookmarks", |_req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
@@ -149,8 +239,435 @@ fn json_with_status(value: &serde_json::Value, status: u16) -> Result<Response> 
     Ok(Response::from_json(value)?.with_status(status))
 }
 
+fn json_with_cookie(value: &serde_json::Value, cookie: &str) -> Result<Response> {
+    let headers = Headers::new();
+    auth::add_set_cookie_header(&headers, cookie)?;
+    Ok(Response::from_json(value)?.with_headers(headers))
+}
+
+fn auth_error(_status: u16, error: &'static str, message: impl Into<String>) -> serde_json::Value {
+    serde_json::to_value(ErrorResponse::with_code(error, message)).unwrap_or_else(|_| {
+        json!({
+            "status": "error",
+            "error": error,
+            "message": "认证失败"
+        })
+    })
+}
+
+fn guard_error(error: auth::AuthGuardError) -> (u16, serde_json::Value) {
+    (
+        error.status(),
+        auth_error(error.status(), error.code(), error.message()),
+    )
+}
+
+async fn ensure_auth_post_request(
+    req: &Request,
+    env: &Env,
+) -> Result<Result<auth::AuthConfig, (u16, serde_json::Value)>> {
+    let config = auth::auth_config(env, req)?;
+
+    if !config.configured {
+        return Ok(Err(guard_error(auth::AuthGuardError::AuthConfigRequired(
+            config.missing_config,
+        ))));
+    }
+
+    if let Err(error) = auth::ensure_json_request(req) {
+        return Ok(Err(guard_error(error)));
+    }
+
+    if let Err(error) = auth::ensure_same_origin(req, &config) {
+        return Ok(Err(guard_error(error)));
+    }
+
+    Ok(Ok(config))
+}
+
+async fn passkey_register_options(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+    payload: PasskeyRegisterOptionsPayload,
+) -> Result<Result<serde_json::Value, (u16, serde_json::Value)>> {
+    let config = match ensure_auth_post_request(req, env).await? {
+        Ok(config) => config,
+        Err(error) => return Ok(Err(error)),
+    };
+    let now = auth::now_timestamp();
+    let setup_allowed = auth::can_use_setup_token(db).await?;
+
+    if setup_allowed {
+        let setup_token = env
+            .secret(auth::SETUP_TOKEN_BINDING)
+            .ok()
+            .map(|value| value.to_string())
+            .unwrap_or_default();
+
+        if setup_token.is_empty()
+            || payload
+                .setup_token
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                != Some(setup_token.as_str())
+        {
+            return Ok(Err((
+                403,
+                auth_error(403, "auth_required", "无法初始化管理权限"),
+            )));
+        }
+    } else if let Err(error) = auth::require_admin_session(db, req).await {
+        return Ok(Err(guard_error(error)));
+    }
+
+    let challenge = auth::random_base64url(32)?;
+    auth::insert_auth_challenge(
+        db,
+        &auth::NewAuthChallenge {
+            id: challenge.clone(),
+            challenge: challenge.clone(),
+            purpose: auth::PURPOSE_PASSKEY_REGISTRATION.to_string(),
+            created_at: now,
+            expires_at: now + AUTH_CHALLENGE_TTL_SECONDS,
+        },
+    )
+    .await?;
+
+    let credentials = auth::list_admin_credentials(db).await?;
+    let exclude_credentials = credentials
+        .into_iter()
+        .map(|credential| {
+            json!({
+                "type": "public-key",
+                "id": credential.credential_id
+            })
+        })
+        .collect::<Vec<_>>();
+    let name = payload
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("Linkwise Admin");
+
+    Ok(Ok(json!({
+        "publicKey": {
+            "challenge": challenge,
+            "rp": {
+                "name": "Linkwise",
+                "id": config.rp_id
+            },
+            "user": {
+                "id": auth::random_base64url(16)?,
+                "name": "admin",
+                "displayName": name
+            },
+            "pubKeyCredParams": [
+                {"type": "public-key", "alg": -7}
+            ],
+            "timeout": 300000,
+            "attestation": "none",
+            "authenticatorSelection": {
+                "residentKey": "preferred",
+                "userVerification": "preferred"
+            },
+            "excludeCredentials": exclude_credentials
+        }
+    })))
+}
+
+async fn passkey_register_verify(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+    payload: PasskeyRegisterVerifyPayload,
+) -> Result<Result<(serde_json::Value, String), (u16, serde_json::Value)>> {
+    let config = match ensure_auth_post_request(req, env).await? {
+        Ok(config) => config,
+        Err(error) => return Ok(Err(error)),
+    };
+    let setup_allowed = auth::can_use_setup_token(db).await?;
+
+    if !setup_allowed {
+        if let Err(error) = auth::require_admin_session(db, req).await {
+            return Ok(Err(guard_error(error)));
+        }
+    }
+
+    let verification = match webauthn::verify_registration_payload(
+        &payload.credential,
+        &config.origin,
+        &config.rp_id,
+    ) {
+        Ok(verification) => verification,
+        Err(_) => {
+            return Ok(Err((
+                400,
+                auth_error(400, "invalid_webauthn_response", "Passkey 注册验证失败"),
+            )))
+        }
+    };
+    let now = auth::now_timestamp();
+    let challenge = auth::get_valid_auth_challenge(
+        db,
+        &verification.challenge,
+        auth::PURPOSE_PASSKEY_REGISTRATION,
+        now,
+    )
+    .await?;
+
+    if challenge.is_none() {
+        return Ok(Err((
+            400,
+            auth_error(400, "invalid_request", "Passkey 注册挑战无效或已过期"),
+        )));
+    }
+
+    let name = payload
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("Passkey")
+        .to_string();
+
+    auth::insert_admin_credential(
+        db,
+        &auth::NewAdminCredential {
+            credential_id: verification.credential_id.clone(),
+            public_key: verification.public_key_jwk,
+            sign_count: verification.sign_count,
+            name,
+            created_at: now,
+        },
+    )
+    .await?;
+    auth::mark_auth_challenge_used(db, &verification.challenge, now).await?;
+
+    if setup_allowed {
+        auth::mark_setup_completed(db, now).await?;
+    }
+
+    let (expires_at, cookie) = create_admin_session_cookie(
+        db,
+        &config,
+        Some(verification.credential_id),
+        payload.session_max_age_seconds,
+        now,
+    )
+    .await?;
+
+    Ok(Ok((
+        json!({
+            "ok": true,
+            "admin_initialized": true,
+            "admin_unlocked": true,
+            "expires_at": expires_at
+        }),
+        cookie,
+    )))
+}
+
+async fn passkey_login_options(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+) -> Result<Result<serde_json::Value, (u16, serde_json::Value)>> {
+    let config = match ensure_auth_post_request(req, env).await? {
+        Ok(config) => config,
+        Err(error) => return Ok(Err(error)),
+    };
+
+    if auth::count_admin_credentials(db).await? == 0 {
+        return Ok(Err((
+            403,
+            auth_error(403, "auth_required", "需要先初始化管理权限"),
+        )));
+    }
+
+    let now = auth::now_timestamp();
+    let challenge = auth::random_base64url(32)?;
+    auth::insert_auth_challenge(
+        db,
+        &auth::NewAuthChallenge {
+            id: challenge.clone(),
+            challenge: challenge.clone(),
+            purpose: auth::PURPOSE_PASSKEY_LOGIN.to_string(),
+            created_at: now,
+            expires_at: now + AUTH_CHALLENGE_TTL_SECONDS,
+        },
+    )
+    .await?;
+
+    let allow_credentials = auth::list_admin_credentials(db)
+        .await?
+        .into_iter()
+        .map(|credential| json!({"type": "public-key", "id": credential.credential_id}))
+        .collect::<Vec<_>>();
+
+    Ok(Ok(json!({
+        "publicKey": {
+            "challenge": challenge,
+            "rpId": config.rp_id,
+            "allowCredentials": allow_credentials,
+            "timeout": 300000,
+            "userVerification": "preferred"
+        }
+    })))
+}
+
+async fn passkey_login_verify(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+    payload: PasskeyLoginVerifyPayload,
+) -> Result<Result<(serde_json::Value, String), (u16, serde_json::Value)>> {
+    let config = match ensure_auth_post_request(req, env).await? {
+        Ok(config) => config,
+        Err(error) => return Ok(Err(error)),
+    };
+    let credential_id = match webauthn::credential_id_from_payload(&payload.credential) {
+        Ok(credential_id) => credential_id,
+        Err(_) => {
+            return Ok(Err((
+                400,
+                auth_error(400, "invalid_webauthn_response", "Passkey 登录验证失败"),
+            )))
+        }
+    };
+    let Some(credential) = auth::get_admin_credential(db, &credential_id).await? else {
+        return Ok(Err((
+            403,
+            auth_error(403, "auth_required", "Passkey 不存在"),
+        )));
+    };
+    let verification = match webauthn::verify_login_payload(
+        &payload.credential,
+        &config.origin,
+        &config.rp_id,
+        &credential.public_key,
+    )
+    .await
+    {
+        Ok(verification) => verification,
+        Err(_) => {
+            return Ok(Err((
+                400,
+                auth_error(400, "invalid_webauthn_response", "Passkey 登录验证失败"),
+            )))
+        }
+    };
+    let now = auth::now_timestamp();
+    let challenge = auth::get_valid_auth_challenge(
+        db,
+        &verification.challenge,
+        auth::PURPOSE_PASSKEY_LOGIN,
+        now,
+    )
+    .await?;
+
+    if challenge.is_none() || verification.credential_id != credential_id {
+        return Ok(Err((
+            400,
+            auth_error(400, "invalid_request", "Passkey 登录挑战无效或已过期"),
+        )));
+    }
+
+    auth::mark_auth_challenge_used(db, &verification.challenge, now).await?;
+    auth::update_admin_credential_usage(
+        db,
+        &credential_id,
+        verification.sign_count.max(credential.sign_count),
+        now,
+    )
+    .await?;
+
+    let (expires_at, cookie) = create_admin_session_cookie(
+        db,
+        &config,
+        Some(credential_id),
+        payload.session_max_age_seconds,
+        now,
+    )
+    .await?;
+
+    Ok(Ok((
+        json!({
+            "ok": true,
+            "admin_unlocked": true,
+            "expires_at": expires_at
+        }),
+        cookie,
+    )))
+}
+
+async fn create_admin_session_cookie(
+    db: &D1Database,
+    config: &auth::AuthConfig,
+    credential_id: Option<String>,
+    requested_max_age: Option<i64>,
+    now: i64,
+) -> Result<(i64, String)> {
+    let token = auth::random_base64url(32)?;
+    let token_hash = auth::hash_session_token(&token);
+    let session_id = auth::random_base64url(18)?;
+    let max_age = requested_max_age
+        .filter(|value| *value > 0)
+        .map(|value| value.min(auth::WEB_SESSION_MAX_AGE_SECONDS));
+    let expires_at = auth::session_expires_at(now, max_age);
+
+    auth::insert_admin_session(
+        db,
+        &auth::NewAdminSession {
+            id: session_id,
+            token_hash,
+            credential_id,
+            created_at: now,
+            last_seen_at: now,
+            expires_at,
+        },
+    )
+    .await?;
+
+    Ok((
+        expires_at,
+        auth::build_session_cookie(&token, config, max_age),
+    ))
+}
+
 async fn initialized_db(env: &Env) -> Result<D1Database> {
     let db = env.d1(db::D1_BINDING)?;
     db::initialize_schema(&db).await?;
     Ok(db)
+}
+
+#[derive(Serialize)]
+struct AuthStatusResponse {
+    public_read: bool,
+    admin_initialized: bool,
+    admin_unlocked: bool,
+    admin_session_expires_at: Option<i64>,
+    auth_configured: bool,
+    missing_config: Vec<&'static str>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct PasskeyRegisterOptionsPayload {
+    setup_token: Option<String>,
+    name: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct PasskeyRegisterVerifyPayload {
+    name: Option<String>,
+    session_max_age_seconds: Option<i64>,
+    credential: webauthn::PublicKeyCredentialPayload,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct PasskeyLoginVerifyPayload {
+    session_max_age_seconds: Option<i64>,
+    credential: webauthn::PublicKeyCredentialPayload,
 }

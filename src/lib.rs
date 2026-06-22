@@ -4,6 +4,7 @@ mod db;
 mod export;
 mod models;
 mod routes;
+mod webauthn;
 
 use worker::*;
 

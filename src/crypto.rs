@@ -20,6 +20,14 @@ pub fn sha256_hex(input: &str) -> String {
     hex_encode(&hasher.finalize())
 }
 
+pub fn sha256_bytes(bytes: &[u8]) -> Vec<u8> {
+    use sha2::{Digest, Sha256};
+
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hasher.finalize().to_vec()
+}
+
 pub fn hex_encode(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut output = String::with_capacity(bytes.len() * 2);
