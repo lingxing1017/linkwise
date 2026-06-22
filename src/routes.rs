@@ -155,6 +155,10 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/bookmarks", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
+            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+                return json_with_status(&body, status);
+            }
+
             let payload = req.json::<BookmarkPayload>().await.unwrap_or_default();
 
             match db::save_bookmark(&db, payload).await? {
@@ -164,6 +168,10 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/bookmarks/bulk", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
+            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+                return json_with_status(&body, status);
+            }
+
             let payload = req.json::<BulkBookmarksPayload>().await.unwrap_or_default();
 
             match db::bulk_save_bookmarks(&db, payload).await? {
@@ -173,6 +181,10 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/bookmarks/move", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
+            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+                return json_with_status(&body, status);
+            }
+
             let payload = req.json::<MoveBookmarksPayload>().await.unwrap_or_default();
 
             match db::move_bookmarks(&db, payload).await? {
@@ -182,6 +194,10 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/bookmarks/reorder", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
+            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+                return json_with_status(&body, status);
+            }
+
             let payload = req
                 .json::<ReorderBookmarksPayload>()
                 .await
@@ -190,6 +206,10 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/bookmarks/delete", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
+            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+                return json_with_status(&body, status);
+            }
+
             let payload = req.json::<IdsPayload>().await.unwrap_or_default();
 
             match db::delete_bookmarks(&db, payload).await? {
@@ -197,8 +217,12 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
                 Err((status, body)) => json_with_status(&body, status),
             }
         })
-        .delete_async("/api/bookmarks/:id", |_req, ctx| async move {
+        .delete_async("/api/bookmarks/:id", |req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
+            if let Err((status, body)) = require_admin_state_change(&db, &req, &ctx.env).await? {
+                return json_with_status(&body, status);
+            }
+
             let id = ctx.param("id").map(String::as_str).unwrap_or("");
             Response::from_json(&db::delete_bookmark(&db, id).await?)
         })
@@ -208,6 +232,10 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/folders/reorder", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
+            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+                return json_with_status(&body, status);
+            }
+
             let payload = req
                 .json::<ReorderFoldersPayload>()
                 .await
@@ -216,6 +244,10 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/folders/move-up", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
+            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+                return json_with_status(&body, status);
+            }
+
             let payload = req.json::<FolderPayload>().await.unwrap_or_default();
 
             match db::move_folder_up(&db, payload).await? {
@@ -225,6 +257,10 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/folders/rename", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
+            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+                return json_with_status(&body, status);
+            }
+
             let payload = req.json::<RenameFolderPayload>().await.unwrap_or_default();
 
             match db::rename_folder(&db, payload).await? {
@@ -234,6 +270,10 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/folders/delete", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
+            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+                return json_with_status(&body, status);
+            }
+
             let payload = req.json::<FolderPayload>().await.unwrap_or_default();
 
             match db::delete_folder(&db, payload).await? {
@@ -256,12 +296,20 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
             )?;
             Ok(Response::from_html(html)?.with_headers(headers))
         })
-        .get_async("/api/webdav/config", |_req, ctx| async move {
+        .get_async("/api/webdav/config", |req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
+            if let Err((status, body)) = require_admin_session_only(&db, &req).await? {
+                return json_with_status(&body, status);
+            }
+
             Response::from_json(&db::webdav_config(&db).await?)
         })
         .post_async("/api/webdav/config", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
+            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+                return json_with_status(&body, status);
+            }
+
             let secret = ctx
                 .env
                 .secret(crate::crypto::SECRET_BINDING)
@@ -303,6 +351,47 @@ fn guard_error(error: auth::AuthGuardError) -> (u16, serde_json::Value) {
         error.status(),
         auth_error(error.status(), error.code(), error.message()),
     )
+}
+
+async fn require_admin_session_only(
+    db: &D1Database,
+    req: &Request,
+) -> Result<Result<(), (u16, serde_json::Value)>> {
+    match auth::require_admin_session(db, req).await {
+        Ok(_) => Ok(Ok(())),
+        Err(error) => Ok(Err(guard_error(error))),
+    }
+}
+
+async fn require_admin_json_request(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+) -> Result<Result<(), (u16, serde_json::Value)>> {
+    match auth::require_admin_request(db, req, env).await {
+        Ok(_) => Ok(Ok(())),
+        Err(error) => Ok(Err(guard_error(error))),
+    }
+}
+
+async fn require_admin_state_change(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+) -> Result<Result<(), (u16, serde_json::Value)>> {
+    let config = auth::auth_config(env, req)?;
+
+    if !config.configured {
+        return Ok(Err(guard_error(auth::AuthGuardError::AuthConfigRequired(
+            config.missing_config,
+        ))));
+    }
+
+    if let Err(error) = auth::ensure_same_origin(req, &config) {
+        return Ok(Err(guard_error(error)));
+    }
+
+    require_admin_session_only(db, req).await
 }
 
 async fn ensure_auth_post_request(
