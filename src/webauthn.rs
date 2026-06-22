@@ -18,6 +18,7 @@ pub struct PublicKeyCredentialPayload {
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthenticatorResponsePayload {
+    #[serde(rename = "clientDataJSON", alias = "clientDataJson")]
     pub client_data_json: String,
     pub attestation_object: Option<String>,
     pub authenticator_data: Option<String>,
