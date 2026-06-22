@@ -102,6 +102,49 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
                 &auth::clear_session_cookie(&config),
             )
         })
+        .get_async("/api/auth/passkeys", |req, ctx| async move {
+            let db = initialized_db(&ctx.env).await?;
+            match passkey_list(&db, &req).await {
+                Ok(Ok(response)) => Response::from_json(&response),
+                Ok(Err((status, body))) => json_with_status(&body, status),
+                Err(error) => Err(error),
+            }
+        })
+        .delete_async("/api/auth/passkeys/:credential_id", |req, ctx| async move {
+            let db = initialized_db(&ctx.env).await?;
+            let credential_id = ctx.param("credential_id").map(String::as_str).unwrap_or("");
+            match passkey_delete(&db, &req, &ctx.env, credential_id).await {
+                Ok(Ok(response)) => Response::from_json(&response),
+                Ok(Err((status, body))) => json_with_status(&body, status),
+                Err(error) => Err(error),
+            }
+        })
+        .get_async("/api/auth/sessions", |req, ctx| async move {
+            let db = initialized_db(&ctx.env).await?;
+            match session_list(&db, &req).await {
+                Ok(Ok(response)) => Response::from_json(&response),
+                Ok(Err((status, body))) => json_with_status(&body, status),
+                Err(error) => Err(error),
+            }
+        })
+        .delete_async("/api/auth/sessions/:session_id", |req, ctx| async move {
+            let db = initialized_db(&ctx.env).await?;
+            let session_id = ctx.param("session_id").map(String::as_str).unwrap_or("");
+            match session_revoke(&db, &req, &ctx.env, session_id).await {
+                Ok(Ok((response, Some(cookie)))) => json_with_cookie(&response, &cookie),
+                Ok(Ok((response, None))) => Response::from_json(&response),
+                Ok(Err((status, body))) => json_with_status(&body, status),
+                Err(error) => Err(error),
+            }
+        })
+        .post_async("/api/auth/sessions/revoke-all", |req, ctx| async move {
+            let db = initialized_db(&ctx.env).await?;
+            match session_revoke_all(&db, &req, &ctx.env).await {
+                Ok(Ok((response, cookie))) => json_with_cookie(&response, &cookie),
+                Ok(Err((status, body))) => json_with_status(&body, status),
+                Err(error) => Err(error),
+            }
+        })
         .get_async("/api/bookmarks", |_req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
             Response::from_json(&db::all_bookmarks(&db).await?)
@@ -600,6 +643,180 @@ async fn passkey_login_verify(
             "expires_at": expires_at
         }),
         cookie,
+    )))
+}
+
+async fn passkey_list(
+    db: &D1Database,
+    req: &Request,
+) -> Result<Result<serde_json::Value, (u16, serde_json::Value)>> {
+    if let Err(error) = auth::require_admin_session(db, req).await {
+        return Ok(Err(guard_error(error)));
+    }
+
+    let passkeys = auth::list_admin_credentials(db)
+        .await?
+        .into_iter()
+        .map(|credential| {
+            json!({
+                "credential_id": credential.credential_id,
+                "name": credential.name,
+                "created_at": credential.created_at,
+                "last_used_at": credential.last_used_at
+            })
+        })
+        .collect::<Vec<_>>();
+
+    Ok(Ok(json!({
+        "ok": true,
+        "passkeys": passkeys
+    })))
+}
+
+async fn passkey_delete(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+    credential_id: &str,
+) -> Result<Result<serde_json::Value, (u16, serde_json::Value)>> {
+    let config = auth::auth_config(env, req)?;
+
+    if let Err(error) = auth::ensure_same_origin(req, &config) {
+        return Ok(Err(guard_error(error)));
+    }
+
+    if let Err(error) = auth::require_admin_session(db, req).await {
+        return Ok(Err(guard_error(error)));
+    }
+
+    if credential_id.is_empty()
+        || auth::get_admin_credential(db, credential_id)
+            .await?
+            .is_none()
+    {
+        return Ok(Err((404, auth_error(404, "not_found", "Passkey 不存在"))));
+    }
+
+    if auth::count_admin_credentials(db).await? <= 1 {
+        return Ok(Err((
+            403,
+            auth_error(403, "setup_not_allowed", "不能删除最后一个 Passkey"),
+        )));
+    }
+
+    let now = auth::now_timestamp();
+    auth::delete_admin_credential(db, credential_id).await?;
+    auth::revoke_sessions_for_credential(db, credential_id, now).await?;
+
+    Ok(Ok(json!({
+        "ok": true,
+        "deleted_credential_id": credential_id
+    })))
+}
+
+async fn session_list(
+    db: &D1Database,
+    req: &Request,
+) -> Result<Result<serde_json::Value, (u16, serde_json::Value)>> {
+    let current_session = match auth::require_admin_session(db, req).await {
+        Ok(session) => session,
+        Err(error) => return Ok(Err(guard_error(error))),
+    };
+    let credentials = auth::list_admin_credentials(db).await?;
+    let credential_names = credentials
+        .into_iter()
+        .map(|credential| (credential.credential_id, credential.name))
+        .collect::<std::collections::HashMap<_, _>>();
+    let sessions = auth::list_admin_sessions(db)
+        .await?
+        .into_iter()
+        .map(|session| {
+            let credential_name = session
+                .credential_id
+                .as_ref()
+                .and_then(|credential_id| credential_names.get(credential_id))
+                .cloned();
+
+            json!({
+                "id": session.id,
+                "credential_id": session.credential_id,
+                "credential_name": credential_name,
+                "created_at": session.created_at,
+                "last_seen_at": session.last_seen_at,
+                "expires_at": session.expires_at,
+                "revoked_at": session.revoked_at,
+                "current": session.id == current_session.id
+            })
+        })
+        .collect::<Vec<_>>();
+
+    Ok(Ok(json!({
+        "ok": true,
+        "sessions": sessions
+    })))
+}
+
+async fn session_revoke(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+    session_id: &str,
+) -> Result<Result<(serde_json::Value, Option<String>), (u16, serde_json::Value)>> {
+    let config = auth::auth_config(env, req)?;
+
+    if let Err(error) = auth::ensure_same_origin(req, &config) {
+        return Ok(Err(guard_error(error)));
+    }
+
+    let current_session = match auth::require_admin_session(db, req).await {
+        Ok(session) => session,
+        Err(error) => return Ok(Err(guard_error(error))),
+    };
+
+    if session_id.is_empty() {
+        return Ok(Err((
+            400,
+            auth_error(400, "invalid_request", "Session ID 无效"),
+        )));
+    }
+
+    auth::revoke_admin_session(db, session_id, auth::now_timestamp()).await?;
+    let revoked_current = session_id == current_session.id;
+    let cookie = revoked_current.then(|| auth::clear_session_cookie(&config));
+
+    Ok(Ok((
+        json!({
+            "ok": true,
+            "revoked_session_id": session_id,
+            "admin_unlocked": !revoked_current
+        }),
+        cookie,
+    )))
+}
+
+async fn session_revoke_all(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+) -> Result<Result<(serde_json::Value, String), (u16, serde_json::Value)>> {
+    let config = auth::auth_config(env, req)?;
+
+    if let Err(error) = auth::ensure_same_origin(req, &config) {
+        return Ok(Err(guard_error(error)));
+    }
+
+    if let Err(error) = auth::require_admin_session(db, req).await {
+        return Ok(Err(guard_error(error)));
+    }
+
+    auth::revoke_all_admin_sessions(db, auth::now_timestamp()).await?;
+
+    Ok(Ok((
+        json!({
+            "ok": true,
+            "admin_unlocked": false
+        }),
+        auth::clear_session_cookie(&config),
     )))
 }
 
