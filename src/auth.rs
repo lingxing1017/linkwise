@@ -411,7 +411,7 @@ fn is_local_host(host: &str) -> bool {
 }
 
 fn local_rp_id(host: &str) -> String {
-    if is_local_host(host) {
+    if host == "::1" {
         "localhost".to_string()
     } else {
         host.to_string()

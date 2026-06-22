@@ -664,7 +664,8 @@ async fn passkey_login_verify(
     };
     let credential_id = match webauthn::credential_id_from_payload(&payload.credential) {
         Ok(credential_id) => credential_id,
-        Err(_) => {
+        Err(error) => {
+            console_log!("Passkey login verification failed: {:?}", error);
             return Ok(Err((
                 400,
                 auth_error(400, "invalid_webauthn_response", "Passkey 登录验证失败"),
@@ -686,7 +687,8 @@ async fn passkey_login_verify(
     .await
     {
         Ok(verification) => verification,
-        Err(_) => {
+        Err(error) => {
+            console_log!("Passkey login verification failed: {:?}", error);
             return Ok(Err((
                 400,
                 auth_error(400, "invalid_webauthn_response", "Passkey 登录验证失败"),

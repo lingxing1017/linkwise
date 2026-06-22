@@ -312,8 +312,10 @@ fn cose_key_to_jwk(value: &CborValue) -> Result<String> {
     serde_json::json!({
         "kty": "EC",
         "crv": "P-256",
+        "alg": "ES256",
         "x": auth::base64url_encode(&x),
         "y": auth::base64url_encode(&y),
+        "key_ops": ["verify"],
         "ext": true
     })
     .to_string()
@@ -353,11 +355,7 @@ async fn verify_es256_signature(
         .map_err(|_| Error::RustError("crypto.subtle.verify is unavailable".to_string()))?
         .dyn_into::<js_sys::Function>()
         .map_err(|_| Error::RustError("crypto.subtle.verify is not callable".to_string()))?;
-    let jwk = serde_wasm_bindgen::to_value(
-        &serde_json::from_str::<serde_json::Value>(public_key_jwk)
-            .map_err(|_| Error::RustError("invalid stored JWK".to_string()))?,
-    )
-    .map_err(|_| Error::RustError("failed to build JWK".to_string()))?;
+    let raw_public_key = jwk_to_raw_p256_public_key(public_key_jwk)?;
     let import_algorithm = Object::new();
 
     Reflect::set(&import_algorithm, &"name".into(), &"ECDSA".into())
@@ -371,8 +369,8 @@ async fn verify_es256_signature(
     let import_promise = import_key
         .call5(
             &subtle,
-            &"jwk".into(),
-            &jwk,
+            &"raw".into(),
+            &Uint8Array::from(raw_public_key.as_slice()),
             &import_algorithm,
             &false.into(),
             &key_usages,
@@ -411,6 +409,31 @@ async fn verify_es256_signature(
         .map_err(|_| Error::RustError("signature verification rejected".to_string()))?;
 
     Ok(verified.as_bool().unwrap_or(false))
+}
+
+fn jwk_to_raw_p256_public_key(public_key_jwk: &str) -> Result<Vec<u8>> {
+    let jwk = serde_json::from_str::<serde_json::Value>(public_key_jwk)
+        .map_err(|_| Error::RustError("invalid stored JWK".to_string()))?;
+    let x = jwk
+        .get("x")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| Error::RustError("stored JWK x is missing".to_string()))
+        .and_then(auth::base64url_decode)?;
+    let y = jwk
+        .get("y")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| Error::RustError("stored JWK y is missing".to_string()))
+        .and_then(auth::base64url_decode)?;
+
+    if x.len() != 32 || y.len() != 32 {
+        return Err(Error::RustError("invalid stored P-256 key length".to_string()));
+    }
+
+    let mut raw = Vec::with_capacity(65);
+    raw.push(0x04);
+    raw.extend(x);
+    raw.extend(y);
+    Ok(raw)
 }
 
 fn der_to_raw_ecdsa_signature(signature: &[u8]) -> Result<Vec<u8>> {
