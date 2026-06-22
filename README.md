@@ -43,6 +43,28 @@ wrangler d1 create linkwise-db
 wrangler secret put LINKWISE_SECRET
 ```
 
+设置用于初始化第一个管理员 Passkey 的 Worker secret：
+
+```bash
+wrangler secret put LINKWISE_SETUP_TOKEN
+```
+
+生产环境启用认证前，请配置最终访问域名对应的 WebAuthn origin 和 RP ID：
+
+```bash
+wrangler secret put LINKWISE_AUTH_ORIGIN
+wrangler secret put LINKWISE_AUTH_RP_ID
+```
+
+示例值：
+
+```text
+LINKWISE_AUTH_ORIGIN=https://links.example.com
+LINKWISE_AUTH_RP_ID=links.example.com
+```
+
+请尽量在最终生产域名确定后再初始化管理员 Passkey。如果先在 `workers.dev` 域名初始化，之后切换到自定义域，旧 Passkey 可能无法继续使用。
+
 应用数据库迁移：
 
 ```bash
@@ -73,8 +95,30 @@ Dashboard 部署前还需要完成这些配置：
 1. 在 Cloudflare 创建 D1 数据库。
 2. 确认 Worker 绑定了名为 `DB` 的 D1 database。
 3. 在 Worker 的 Variables and Secrets 里设置 `LINKWISE_SECRET`。
+4. 设置 `LINKWISE_SETUP_TOKEN`，用于注册第一个管理员 Passkey。
+5. 设置 `LINKWISE_AUTH_ORIGIN` 和 `LINKWISE_AUTH_RP_ID`，并在最终生产域名确定后再初始化管理员 Passkey。
 
 Worker 会在第一次处理 API 请求时自动初始化 D1 schema。`migrations/0001_init.sql` 仍然保留，作为 schema 的显式记录和后续数据库变更的迁移基础。
+
+## 认证和管理模式
+
+Linkwise 默认公开只读。任何访问者都可以浏览、搜索和导出书签；新增、编辑、删除、排序、导入、目录管理和 WebDAV 配置都需要先解锁管理模式。
+
+首次点击“初始化管理权限”时，Linkwise 会要求输入 `LINKWISE_SETUP_TOKEN` 并注册第一个 Passkey。第一个 Passkey 注册成功后，setup token 会在逻辑上永久失效；后续解锁和新增 Passkey 都必须依赖已有管理员身份。
+
+Web 端管理员 session 使用 HttpOnly cookie 和 D1 中保存的 token hash。默认是浏览器会话 cookie，服务端最长有效期不超过 24 小时。本地 `localhost` / `127.0.0.1` 开发允许 cookie 不带 `Secure`，生产 HTTPS 环境必须带 `Secure`。
+
+如果所有管理员 Passkey 都丢失，第一版只支持手动 D1 运维恢复。通过 Cloudflare D1 控制台或 `wrangler d1 execute` 执行：
+
+```sql
+DELETE FROM admin_credentials;
+DELETE FROM admin_sessions;
+DELETE FROM auth_challenges;
+DELETE FROM settings
+WHERE key IN ('auth.setup_completed', 'auth.setup_completed_at');
+```
+
+然后确认 `LINKWISE_SETUP_TOKEN` 仍然存在，重新打开 Linkwise 并初始化第一个 Passkey。
 
 当前 Rust Worker 提供这些主要 API：
 
@@ -82,21 +126,34 @@ Worker 会在第一次处理 API 请求时自动初始化 D1 schema。`migration
 GET /api/health
 GET /api/bootstrap
 GET /api/bookmarks
+GET /api/folder-orders
+GET /api/bookmarks/export
+GET /api/auth/status
+POST /api/auth/passkey/register/options
+POST /api/auth/passkey/register/verify
+POST /api/auth/passkey/login/options
+POST /api/auth/passkey/login/verify
+POST /api/auth/logout
+GET /api/auth/passkeys
+DELETE /api/auth/passkeys/:credential_id
+GET /api/auth/sessions
+DELETE /api/auth/sessions/:session_id
+POST /api/auth/sessions/revoke-all
 POST /api/bookmarks
 POST /api/bookmarks/bulk
 POST /api/bookmarks/move
 POST /api/bookmarks/reorder
 POST /api/bookmarks/delete
 DELETE /api/bookmarks/:id
-GET /api/folder-orders
 POST /api/folders/reorder
 POST /api/folders/move-up
 POST /api/folders/rename
 POST /api/folders/delete
-GET /api/bookmarks/export
 GET /api/webdav/config
 POST /api/webdav/config
 ```
+
+其中公开只读 API 包括 `health`、`bootstrap`、`bookmarks`、`folder-orders`、`bookmarks/export` 和 `auth/status`。其他管理 API 需要有效 admin session。
 
 WebDAV 配置已迁移到 D1。当前 Worker 版不会把 WebDAV 密码明文写入 D1；保存新密码时需要配置 `LINKWISE_SECRET`。
 
