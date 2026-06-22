@@ -11,7 +11,16 @@ pub fn protect_webdav_password(password: &str, secret: &str) -> String {
     hex_encode(&hasher.finalize())
 }
 
-fn hex_encode(bytes: &[u8]) -> String {
+#[allow(dead_code)]
+pub fn sha256_hex(input: &str) -> String {
+    use sha2::{Digest, Sha256};
+
+    let mut hasher = Sha256::new();
+    hasher.update(input.as_bytes());
+    hex_encode(&hasher.finalize())
+}
+
+pub fn hex_encode(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut output = String::with_capacity(bytes.len() * 2);
 

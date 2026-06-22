@@ -1,3 +1,4 @@
+mod auth;
 mod crypto;
 mod db;
 mod export;

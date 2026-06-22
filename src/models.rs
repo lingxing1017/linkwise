@@ -54,6 +54,40 @@ pub struct CountValue {
     pub value: i64,
 }
 
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AdminCredential {
+    pub credential_id: String,
+    pub public_key: String,
+    pub sign_count: i64,
+    pub name: String,
+    pub created_at: i64,
+    pub last_used_at: Option<i64>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthChallenge {
+    pub id: String,
+    pub challenge: String,
+    pub purpose: String,
+    pub created_at: i64,
+    pub expires_at: i64,
+    pub used_at: Option<i64>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AdminSession {
+    pub id: String,
+    pub token_hash: String,
+    pub credential_id: Option<String>,
+    pub created_at: i64,
+    pub last_seen_at: i64,
+    pub expires_at: i64,
+    pub revoked_at: Option<i64>,
+}
+
 #[derive(Serialize)]
 pub struct BookmarkSaveResponse {
     pub status: &'static str,
