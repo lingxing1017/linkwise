@@ -333,6 +333,7 @@ fn json_with_status(value: &serde_json::Value, status: u16) -> Result<Response> 
 
 fn json_with_cookie(value: &serde_json::Value, cookie: &str) -> Result<Response> {
     let headers = Headers::new();
+    headers.set("Content-Type", "application/json; charset=utf-8")?;
     auth::add_set_cookie_header(&headers, cookie)?;
     Ok(Response::from_json(value)?.with_headers(headers))
 }
