@@ -7,6 +7,9 @@ use js_sys::{Reflect, Uint8Array};
 use worker::d1::{D1Database, D1Type};
 use worker::*;
 
+pub const ADMIN_SESSION_COOKIE: &str = "linkwise_admin_session";
+pub const AUTH_ORIGIN_BINDING: &str = "LINKWISE_AUTH_ORIGIN";
+pub const AUTH_RP_ID_BINDING: &str = "LINKWISE_AUTH_RP_ID";
 pub const SETUP_COMPLETED_KEY: &str = "auth.setup_completed";
 pub const SETUP_COMPLETED_AT_KEY: &str = "auth.setup_completed_at";
 pub const PURPOSE_PASSKEY_REGISTRATION: &str = "passkey_registration";
@@ -50,6 +53,50 @@ pub struct AuthRateLimit {
     pub locked_until: Option<i64>,
 }
 
+#[derive(Debug, Clone)]
+pub struct AuthConfig {
+    pub origin: String,
+    pub rp_id: String,
+    pub is_local_dev: bool,
+    pub configured: bool,
+    pub missing_config: Vec<&'static str>,
+}
+
+#[derive(Debug, Clone)]
+pub enum AuthGuardError {
+    AdminSessionRequired,
+    AuthConfigRequired(Vec<&'static str>),
+    InvalidContentType,
+    InvalidOrigin,
+}
+
+impl AuthGuardError {
+    pub fn status(&self) -> u16 {
+        match self {
+            Self::AdminSessionRequired => 401,
+            Self::AuthConfigRequired(_) | Self::InvalidContentType | Self::InvalidOrigin => 403,
+        }
+    }
+
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::AdminSessionRequired => "admin_session_required",
+            Self::AuthConfigRequired(_) => "auth_config_required",
+            Self::InvalidContentType => "invalid_content_type",
+            Self::InvalidOrigin => "invalid_origin",
+        }
+    }
+
+    pub fn message(&self) -> &'static str {
+        match self {
+            Self::AdminSessionRequired => "需要解锁管理模式",
+            Self::AuthConfigRequired(_) => "认证配置不完整",
+            Self::InvalidContentType => "请求类型无效",
+            Self::InvalidOrigin => "请求来源无效",
+        }
+    }
+}
+
 pub fn now_timestamp() -> i64 {
     (js_sys::Date::now() / 1000.0).floor() as i64
 }
@@ -58,14 +105,21 @@ pub fn hash_session_token(token: &str) -> String {
     crypto::sha256_hex(token)
 }
 
+pub fn session_expires_at(now: i64, requested_max_age: Option<i64>) -> i64 {
+    let max_age = requested_max_age
+        .filter(|value| *value > 0)
+        .unwrap_or(WEB_SESSION_MAX_AGE_SECONDS)
+        .min(WEB_SESSION_MAX_AGE_SECONDS);
+    now + max_age
+}
+
 pub fn random_base64url(byte_len: u32) -> Result<String> {
     let bytes = random_bytes(byte_len)?;
     Ok(base64url_encode(&bytes))
 }
 
 pub fn base64url_encode(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut output = String::with_capacity((bytes.len() * 4).div_ceil(3));
     let mut index = 0;
 
@@ -107,6 +161,222 @@ fn random_bytes(byte_len: u32) -> Result<Vec<u8>> {
         .map_err(|_| Error::RustError("crypto.getRandomValues failed".to_string()))?;
 
     Ok(array.to_vec())
+}
+
+pub fn optional_env_var(env: &Env, binding: &str) -> Option<String> {
+    env.var(binding)
+        .ok()
+        .map(|value| value.to_string())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+pub fn request_origin(req: &Request) -> Result<String> {
+    let url = req.url()?;
+    let scheme = url.scheme();
+    let host = url
+        .host_str()
+        .ok_or_else(|| Error::RustError("request URL is missing host".to_string()))?;
+
+    match url.port() {
+        Some(port) => Ok(format!("{scheme}://{host}:{port}")),
+        None => Ok(format!("{scheme}://{host}")),
+    }
+}
+
+pub fn auth_config(env: &Env, req: &Request) -> Result<AuthConfig> {
+    let request_origin = request_origin(req)?;
+    let request_host = req.url()?.host_str().unwrap_or_default().to_string();
+    let is_local_dev = is_local_host(&request_host);
+    let origin = optional_env_var(env, AUTH_ORIGIN_BINDING);
+    let rp_id = optional_env_var(env, AUTH_RP_ID_BINDING);
+    let mut missing_config = Vec::new();
+
+    if origin.is_none() && !is_local_dev {
+        missing_config.push(AUTH_ORIGIN_BINDING);
+    }
+
+    if rp_id.is_none() && !is_local_dev {
+        missing_config.push(AUTH_RP_ID_BINDING);
+    }
+
+    Ok(AuthConfig {
+        origin: origin.unwrap_or_else(|| request_origin.clone()),
+        rp_id: rp_id.unwrap_or_else(|| local_rp_id(&request_host)),
+        is_local_dev,
+        configured: missing_config.is_empty(),
+        missing_config,
+    })
+}
+
+pub fn should_use_secure_cookie(config: &AuthConfig) -> bool {
+    config.origin.starts_with("https://")
+}
+
+pub fn build_session_cookie(token: &str, config: &AuthConfig, max_age: Option<i64>) -> String {
+    let mut parts = vec![
+        format!("{ADMIN_SESSION_COOKIE}={token}"),
+        "HttpOnly".to_string(),
+        "SameSite=Lax".to_string(),
+        "Path=/".to_string(),
+    ];
+
+    if should_use_secure_cookie(config) {
+        parts.push("Secure".to_string());
+    }
+
+    if let Some(max_age) = max_age.filter(|value| *value > 0) {
+        parts.push(format!(
+            "Max-Age={}",
+            max_age.min(WEB_SESSION_MAX_AGE_SECONDS)
+        ));
+    }
+
+    parts.join("; ")
+}
+
+pub fn clear_session_cookie(config: &AuthConfig) -> String {
+    let mut parts = vec![
+        format!("{ADMIN_SESSION_COOKIE}="),
+        "HttpOnly".to_string(),
+        "SameSite=Lax".to_string(),
+        "Path=/".to_string(),
+        "Max-Age=0".to_string(),
+    ];
+
+    if should_use_secure_cookie(config) {
+        parts.push("Secure".to_string());
+    }
+
+    parts.join("; ")
+}
+
+pub fn add_set_cookie_header(headers: &Headers, cookie: &str) -> Result<()> {
+    headers.append("Set-Cookie", cookie)
+}
+
+pub fn session_token_from_request(req: &Request) -> Result<Option<String>> {
+    let Some(cookie_header) = req.headers().get("Cookie")? else {
+        return Ok(None);
+    };
+
+    Ok(parse_cookie_value(&cookie_header, ADMIN_SESSION_COOKIE))
+}
+
+pub fn parse_cookie_value(header: &str, name: &str) -> Option<String> {
+    for part in header.split(';') {
+        let mut pieces = part.trim().splitn(2, '=');
+        let Some(cookie_name) = pieces.next() else {
+            continue;
+        };
+        let Some(cookie_value) = pieces.next() else {
+            continue;
+        };
+
+        if cookie_name == name {
+            return Some(cookie_value.to_string()).filter(|value| !value.is_empty());
+        }
+    }
+
+    None
+}
+
+pub fn is_unsafe_method(method: &Method) -> bool {
+    !matches!(method, Method::Get | Method::Head | Method::Options)
+}
+
+pub fn ensure_json_request(req: &Request) -> std::result::Result<(), AuthGuardError> {
+    if !is_unsafe_method(&req.method()) {
+        return Ok(());
+    }
+
+    let content_type = req
+        .headers()
+        .get("Content-Type")
+        .ok()
+        .flatten()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    if content_type
+        .split(';')
+        .next()
+        .map(str::trim)
+        .is_some_and(|value| value == "application/json")
+    {
+        return Ok(());
+    }
+
+    Err(AuthGuardError::InvalidContentType)
+}
+
+pub fn ensure_same_origin(
+    req: &Request,
+    config: &AuthConfig,
+) -> std::result::Result<(), AuthGuardError> {
+    if !is_unsafe_method(&req.method()) {
+        return Ok(());
+    }
+
+    let origin = req.headers().get("Origin").ok().flatten();
+
+    match origin {
+        Some(origin) if origin == config.origin => Ok(()),
+        None if config.is_local_dev => Ok(()),
+        _ => Err(AuthGuardError::InvalidOrigin),
+    }
+}
+
+pub async fn require_admin_session(
+    db: &D1Database,
+    req: &Request,
+) -> std::result::Result<AdminSession, AuthGuardError> {
+    let token = session_token_from_request(req)
+        .map_err(|_| AuthGuardError::AdminSessionRequired)?
+        .ok_or(AuthGuardError::AdminSessionRequired)?;
+    let token_hash = hash_session_token(&token);
+    let now = now_timestamp();
+    let session = get_valid_admin_session_by_hash(db, &token_hash, now)
+        .await
+        .map_err(|_| AuthGuardError::AdminSessionRequired)?
+        .ok_or(AuthGuardError::AdminSessionRequired)?;
+
+    touch_admin_session(db, &session.id, now)
+        .await
+        .map_err(|_| AuthGuardError::AdminSessionRequired)?;
+
+    Ok(AdminSession {
+        last_seen_at: now,
+        ..session
+    })
+}
+
+pub async fn require_admin_request(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+) -> std::result::Result<AdminSession, AuthGuardError> {
+    let config = auth_config(env, req).map_err(|_| AuthGuardError::AuthConfigRequired(vec![]))?;
+
+    if !config.configured {
+        return Err(AuthGuardError::AuthConfigRequired(config.missing_config));
+    }
+
+    ensure_json_request(req)?;
+    ensure_same_origin(req, &config)?;
+    require_admin_session(db, req).await
+}
+
+fn is_local_host(host: &str) -> bool {
+    matches!(host, "localhost" | "127.0.0.1" | "::1")
+}
+
+fn local_rp_id(host: &str) -> String {
+    if is_local_host(host) {
+        "localhost".to_string()
+    } else {
+        host.to_string()
+    }
 }
 
 pub async fn get_setting(db: &D1Database, key: &str) -> Result<Option<String>> {
@@ -378,7 +648,11 @@ pub async fn list_admin_sessions(db: &D1Database) -> Result<Vec<AdminSession>> {
     .results()
 }
 
-pub async fn touch_admin_session(db: &D1Database, session_id: &str, last_seen_at: i64) -> Result<()> {
+pub async fn touch_admin_session(
+    db: &D1Database,
+    session_id: &str,
+    last_seen_at: i64,
+) -> Result<()> {
     let args = [
         D1Type::Integer(last_seen_at as i32),
         D1Type::Text(session_id),
@@ -391,7 +665,11 @@ pub async fn touch_admin_session(db: &D1Database, session_id: &str, last_seen_at
     Ok(())
 }
 
-pub async fn revoke_admin_session(db: &D1Database, session_id: &str, revoked_at: i64) -> Result<()> {
+pub async fn revoke_admin_session(
+    db: &D1Database,
+    session_id: &str,
+    revoked_at: i64,
+) -> Result<()> {
     let args = [D1Type::Integer(revoked_at as i32), D1Type::Text(session_id)];
     db.prepare("UPDATE admin_sessions SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL")
         .bind_refs(&args)?

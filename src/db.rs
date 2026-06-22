@@ -200,17 +200,11 @@ pub async fn initialize_schema(db: &D1Database) -> Result<()> {
 }
 
 pub async fn all_bookmarks(db: &D1Database) -> Result<Vec<Bookmark>> {
-    db.prepare(ALL_BOOKMARKS_SQL)
-    .all()
-    .await?
-    .results()
+    db.prepare(ALL_BOOKMARKS_SQL).all().await?.results()
 }
 
 pub async fn all_folder_orders(db: &D1Database) -> Result<Vec<FolderOrder>> {
-    db.prepare(ALL_FOLDER_ORDERS_SQL)
-    .all()
-    .await?
-    .results()
+    db.prepare(ALL_FOLDER_ORDERS_SQL).all().await?.results()
 }
 
 pub async fn bootstrap_data(db: &D1Database) -> Result<BootstrapResponse> {
