@@ -141,6 +141,8 @@ document.addEventListener('keydown', (event) => {
 form.addEventListener('submit', async function(event) {
     event.preventDefault();
 
+    if (!isAdminUnlocked()) return;
+
     const id = document.getElementById('bookmark-id').value || Date.now().toString();
     const title = document.getElementById('title').value.trim();
     const url = document.getElementById('url').value.trim();
@@ -193,4 +195,8 @@ search.addEventListener('input', renderCards);
 
 applyBookmarkDensity(getStoredBookmarkDensity());
 syncTopbarHeight();
-fetchList();
+
+(async function initApp() {
+    await refreshAuthStatus();
+    await fetchList();
+})();

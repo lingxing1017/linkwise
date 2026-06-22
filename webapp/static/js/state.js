@@ -26,6 +26,7 @@ const sidebar = document.querySelector('.sidebar');
 const drawerScrim = document.getElementById('drawer-scrim');
 const floatingMenu = document.getElementById('floating-menu');
 const topbarMoreMenu = document.getElementById('topbar-more-menu');
+const authActionButton = document.getElementById('auth-action-btn');
 const densityMenu = document.getElementById('density-menu');
 const densityCurrentLabel = document.getElementById('density-current-label');
 const bookmarkListHeader = document.getElementById('bookmark-list-header');
@@ -59,6 +60,14 @@ const BOOKMARK_DENSITIES = new Set(['comfortable', 'compact']);
 const BOOKMARK_DENSITY_LABELS = {
     comfortable: '舒适',
     compact: '紧凑'
+};
+let authState = {
+    public_read: true,
+    admin_initialized: false,
+    admin_unlocked: false,
+    admin_session_expires_at: null,
+    auth_configured: true,
+    missing_config: []
 };
 let activeFolderSuggestionInput = null;
 

@@ -177,6 +177,10 @@ button {
     box-shadow: 0 0 0 4px var(--focus-ring);
 }
 
+body.readonly-mode .brand-settings-btn {
+    pointer-events: none;
+}
+
 .brand-subtitle {
     margin-top: 2px;
     font-size: 12px;
@@ -507,6 +511,29 @@ button {
 
 .topbar-more {
     position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.auth-action-btn {
+    height: 42px;
+    border: 1px solid var(--focus-border);
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 0 14px;
+    white-space: nowrap;
+    transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.auth-action-btn:hover {
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 8px 20px rgba(79, 124, 255, 0.2);
 }
 
 .topbar-more-btn {
@@ -1455,6 +1482,12 @@ body[data-density="compact"] .folder-row {
     z-index: 20;
     width: 60px;
     height: 60px;
+}
+
+body.readonly-mode .floating-menu,
+body.readonly-mode .bulk-mini-bar,
+body.readonly-mode .bookmark-list-header {
+    display: none;
 }
 
 .floating-menu::before {

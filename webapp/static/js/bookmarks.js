@@ -375,8 +375,8 @@ function createFolderTreeButton({ label, count, value, parentFolder = '', level,
     button.style.setProperty('--level', level);
 
     const isExpanded = expandedFolders.has(value);
-    const showActions = canManage ?? !isSmartView(value);
-    const canSort = !isSmartView(value);
+    const showActions = isAdminUnlocked() && (canManage ?? !isSmartView(value));
+    const canSort = isAdminUnlocked() && !isSmartView(value);
 
     if (canSort) {
         button.draggable = true;
@@ -460,7 +460,8 @@ function createFolderTreeButton({ label, count, value, parentFolder = '', level,
 }
 
 function canSortContentRows() {
-    return !hasSearchKeyword() &&
+    return isAdminUnlocked() &&
+        !hasSearchKeyword() &&
         selectedFolder !== ALL_BOOKMARKS_VIEW &&
         selectedFolder !== LAST_IMPORT_VIEW;
 }
@@ -617,6 +618,8 @@ async function reorderContentRowsAfterDrop(dragging, target, event) {
 }
 
 async function saveFolderOrder(parentFolder, folders) {
+    if (!isAdminUnlocked()) return;
+
     try {
         const res = await fetch(`${API_BASE}/folders/reorder`, {
             method: 'POST',
@@ -650,6 +653,8 @@ async function saveFolderOrder(parentFolder, folders) {
 }
 
 async function saveBookmarkOrder(folder, ids) {
+    if (!isAdminUnlocked()) return;
+
     try {
         const res = await fetch(`${API_BASE}/bookmarks/reorder`, {
             method: 'POST',
@@ -685,6 +690,10 @@ async function saveBookmarkOrder(folder, ids) {
 }
 
 function createImportGroupDivider(folder) {
+    if (!isAdminUnlocked()) {
+        return document.createTextNode('');
+    }
+
     const folderLabel = folder || '未分类';
     const groupIds = getVisibleBookmarks()
         .filter(bookmark => normalizeFolder(bookmark.folder) === folder)
@@ -727,6 +736,7 @@ function createImportGroupDivider(folder) {
 function renderCards() {
     const visible = getVisibleBookmarks();
     const childFolders = getChildFolders();
+    const canManage = isAdminUnlocked();
 
     const isSearching = hasSearchKeyword();
     const isLastImportView = selectedFolder === LAST_IMPORT_VIEW;
@@ -750,19 +760,19 @@ function renderCards() {
         : `${childFolders.length} 个子目录，${visible.length} 个书签，共 ${bookmarks.length} 个书签`;
 
     if (bulkExportButton) {
-        bulkExportButton.hidden = isLastImportView;
+        bulkExportButton.hidden = isLastImportView || !canManage;
     }
 
     if (bulkFinishButton) {
-        bulkFinishButton.hidden = !isLastImportView;
+        bulkFinishButton.hidden = !isLastImportView || !canManage;
     }
 
     if (bulkMiniExportButton) {
-        bulkMiniExportButton.hidden = isLastImportView;
+        bulkMiniExportButton.hidden = isLastImportView || !canManage;
     }
 
     if (bulkMiniFinishButton) {
-        bulkMiniFinishButton.hidden = !isLastImportView;
+        bulkMiniFinishButton.hidden = !isLastImportView || !canManage;
     }
 
     wrapper.innerHTML = '';
@@ -800,9 +810,15 @@ function renderCards() {
         });
 
         row.innerHTML = `
-            <label class="bookmark-select" title="选择目录下的书签">
-                <input type="checkbox" ${isFolderSelected ? 'checked' : ''}>
-            </label>
+            ${
+                canManage
+                    ? `
+                    <label class="bookmark-select" title="选择目录下的书签">
+                        <input type="checkbox" ${isFolderSelected ? 'checked' : ''}>
+                    </label>
+                `
+                    : ''
+            }
 
             <div class="bookmark-letter folder-letter">📁</div>
 
@@ -816,10 +832,16 @@ function renderCards() {
 
             <span class="bookmark-folder" title="${escapeHtml(folder.path)}">${escapeHtml(folder.path)}</span>
 
-            <div class="bookmark-actions">
-                <button class="row-btn icon-btn" title="编辑目录" aria-label="编辑目录" onclick="event.stopPropagation(); handleRenameFolder('${escapeHtml(folder.path)}')">✎</button>
-                <button class="row-btn icon-btn danger" title="删除目录" aria-label="删除目录" onclick="event.stopPropagation(); handleDeleteFolder('${escapeHtml(folder.path)}')">×</button>
-            </div>
+            ${
+                canManage
+                    ? `
+                    <div class="bookmark-actions">
+                        <button class="row-btn icon-btn" title="编辑目录" aria-label="编辑目录" onclick="event.stopPropagation(); handleRenameFolder('${escapeHtml(folder.path)}')">✎</button>
+                        <button class="row-btn icon-btn danger" title="删除目录" aria-label="删除目录" onclick="event.stopPropagation(); handleDeleteFolder('${escapeHtml(folder.path)}')">×</button>
+                    </div>
+                `
+                    : ''
+            }
         `;
 
         wrapper.appendChild(row);
@@ -885,9 +907,15 @@ function renderCards() {
         });
 
         row.innerHTML = `
-            <label class="bookmark-select" title="选择书签">
-                <input type="checkbox" ${isSelected ? 'checked' : ''}>
-            </label>
+            ${
+                canManage
+                    ? `
+                    <label class="bookmark-select" title="选择书签">
+                        <input type="checkbox" ${isSelected ? 'checked' : ''}>
+                    </label>
+                `
+                    : ''
+            }
 
             <div class="bookmark-letter">${escapeHtml(firstChar)}</div>
 
@@ -901,10 +929,16 @@ function renderCards() {
 
             <span class="bookmark-folder" title="${escapeHtml(folder)}">${escapeHtml(folder)}</span>
 
-            <div class="bookmark-actions">
-                <button class="row-btn icon-btn" title="编辑书签" aria-label="编辑书签" onclick="editItem(event, '${escapeHtml(id)}')">✎</button>
-                <button class="row-btn icon-btn danger" title="删除书签" aria-label="删除书签" onclick="removeItem(event, '${escapeHtml(id)}')">×</button>
-            </div>
+            ${
+                canManage
+                    ? `
+                    <div class="bookmark-actions">
+                        <button class="row-btn icon-btn" title="编辑书签" aria-label="编辑书签" onclick="editItem(event, '${escapeHtml(id)}')">✎</button>
+                        <button class="row-btn icon-btn danger" title="删除书签" aria-label="删除书签" onclick="removeItem(event, '${escapeHtml(id)}')">×</button>
+                    </div>
+                `
+                    : ''
+            }
         `;
 
         wrapper.appendChild(row);
@@ -938,6 +972,8 @@ function renderCards() {
 }
 
 function handleDeleteFolder(folder) {
+    if (!isAdminUnlocked()) return;
+
     pendingDeleteFolder = folder;
 
     const folderNameEl = document.getElementById('delete-folder-name');
@@ -962,6 +998,8 @@ function handleDeleteFolder(folder) {
 }
 
 function handleRenameFolder(folder) {
+    if (!isAdminUnlocked()) return;
+
     pendingRenameFolder = folder;
 
     const folderNameEl = document.getElementById('rename-folder-name');
@@ -987,6 +1025,8 @@ window.closeFolderRenameDialog = function() {
 };
 
 window.confirmFolderRename = async function() {
+    if (!isAdminUnlocked()) return;
+
     if (!pendingRenameFolder) return;
 
     const inputEl = document.getElementById('rename-folder-input');
@@ -1004,6 +1044,8 @@ window.closeFolderDeleteDialog = function() {
 };
 
 window.confirmFolderDelete = async function() {
+    if (!isAdminUnlocked()) return;
+
     if (!pendingDeleteFolder) return;
 
     const folder = pendingDeleteFolder;
@@ -1028,6 +1070,8 @@ window.confirmFolderDelete = async function() {
 };
 
 async function moveFolderBookmarksUp(folder) {
+    if (!isAdminUnlocked()) return;
+
     try {
         const res = await fetch(`${API_BASE}/folders/move-up`, {
             method: 'POST',
@@ -1056,6 +1100,8 @@ async function moveFolderBookmarksUp(folder) {
 }
 
 async function renameFolder(folder, newFolder) {
+    if (!isAdminUnlocked()) return;
+
     try {
         const res = await fetch(`${API_BASE}/folders/rename`, {
             method: 'POST',
@@ -1087,6 +1133,8 @@ async function renameFolder(folder, newFolder) {
 }
 
 async function deleteFolderWithBookmarks(folder) {
+    if (!isAdminUnlocked()) return;
+
     try {
         const res = await fetch(`${API_BASE}/folders/delete`, {
             method: 'POST',

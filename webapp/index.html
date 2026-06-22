@@ -47,6 +47,10 @@
                     </div>
 
                     <div class="topbar-more" id="topbar-more-menu">
+                        <button type="button" class="auth-action-btn" id="auth-action-btn" onclick="handleAuthAction()">
+                            初始化管理权限
+                        </button>
+
                         <button type="button" class="topbar-more-btn" title="更多" onclick="toggleTopbarMoreMenu(event)">
                             <svg viewBox="0 0 24 24">
                                 <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
@@ -321,6 +325,7 @@
     <script src="static/js/utils.js"></script>
     <script src="static/js/dialog.js"></script>
     <script src="static/js/state.js"></script>
+    <script src="static/js/auth.js"></script>
     <script src="static/js/density.js"></script>
     <script src="static/js/folder-suggestions.js"></script>
     <script src="static/js/selection.js"></script>

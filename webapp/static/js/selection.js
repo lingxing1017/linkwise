@@ -1,4 +1,6 @@
 function getSelectedBookmarkIds() {
+    if (!isAdminUnlocked()) return [];
+
     return Array.from(selectedBookmarkIds);
 }
 
@@ -22,6 +24,8 @@ function getFolderRowBookmarkIds(folderPath) {
 }
 
 function getCurrentPageSelectableBookmarkIds() {
+    if (!isAdminUnlocked()) return [];
+
     const ids = new Set(getVisibleBookmarks().map(bookmark => String(bookmark.id || '')));
 
     for (const folder of getChildFolders()) {
@@ -34,6 +38,10 @@ function getCurrentPageSelectableBookmarkIds() {
 }
 
 function updateBulkMoveBar() {
+    if (!isAdminUnlocked()) {
+        selectedBookmarkIds.clear();
+    }
+
     const count = selectedBookmarkIds.size;
     const currentPageIds = getCurrentPageSelectableBookmarkIds();
     const currentPageSelectedCount = currentPageIds.filter(id => selectedBookmarkIds.has(id)).length;
@@ -47,7 +55,7 @@ function updateBulkMoveBar() {
     }
 
     if (bookmarkListHeader) {
-        setClassVisible(bookmarkListHeader, 'show', true);
+        setClassVisible(bookmarkListHeader, 'show', isAdminUnlocked());
     }
 
     if (bulkSelectAll) {
@@ -85,7 +93,7 @@ function updateBulkMiniBar() {
     if (!bulkMiniBar) return;
 
     const count = selectedBookmarkIds.size;
-    setClassVisible(bulkMiniBar, 'show', count > 0);
+    setClassVisible(bulkMiniBar, 'show', isAdminUnlocked() && count > 0);
 }
 
 window.clearBookmarkSelection = function() {
