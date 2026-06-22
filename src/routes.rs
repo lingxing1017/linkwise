@@ -287,6 +287,7 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
             let timestamp = (js_sys::Date::now() / 1000.0).floor() as i64;
             let html = export::build_bookmarks_html(&bookmarks, timestamp);
             let headers = Headers::new();
+            headers.set("Content-Type", "text/html; charset=utf-8")?;
             headers.set(
                 "Content-Disposition",
                 &format!(
