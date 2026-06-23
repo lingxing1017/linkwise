@@ -611,7 +611,7 @@ async fn passkey_register_verify(
         .unwrap_or("Passkey")
         .to_string();
 
-    auth::insert_admin_credential(
+    finalize_passkey_registration(
         db,
         &auth::NewAdminCredential {
             credential_id: verification.credential_id.clone(),
@@ -620,13 +620,11 @@ async fn passkey_register_verify(
             name,
             created_at: now,
         },
+        &verification.challenge,
+        now,
+        setup_allowed,
     )
     .await?;
-    auth::mark_auth_challenge_used(db, &verification.challenge, now).await?;
-
-    if setup_allowed {
-        auth::mark_setup_completed(db, now).await?;
-    }
 
     let (expires_at, cookie) = create_admin_session_cookie(
         db,
@@ -646,6 +644,23 @@ async fn passkey_register_verify(
         }),
         cookie,
     )))
+}
+
+async fn finalize_passkey_registration(
+    db: &D1Database,
+    credential: &auth::NewAdminCredential,
+    challenge_id: &str,
+    now: i64,
+    setup_allowed: bool,
+) -> Result<()> {
+    auth::insert_admin_credential(db, credential).await?;
+    auth::mark_auth_challenge_used(db, challenge_id, now).await?;
+
+    if setup_allowed {
+        auth::mark_setup_completed(db, now).await?;
+    }
+
+    Ok(())
 }
 
 async fn passkey_login_options(
