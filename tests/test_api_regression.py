@@ -66,6 +66,23 @@ def test_auth_status_returns_public_read_state(api_client):
     assert "admin_initialized" in result
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/health",
+        "/api/bootstrap",
+        "/api/bookmarks",
+        "/api/folder-orders",
+        "/api/bookmarks/export",
+        "/api/auth/status",
+    ],
+)
+def test_public_read_apis_remain_accessible(api_client, path):
+    response = api_client.get(path)
+
+    assert response.status == 200
+
+
 def test_setup_token_failures_are_rate_limited(api_client):
     marker = unique_id("setup-rate")
     headers = {"CF-Connecting-IP": f"198.51.100.{int(time.time_ns() % 200) + 1}"}
@@ -141,6 +158,39 @@ def test_auth_mutations_reject_cross_origin(api_client, method, path, payload):
     assert response.status == 403
     assert result["status"] == "error"
     assert result["error"] == "invalid_origin"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/bookmarks",
+        "/api/bookmarks/bulk",
+        "/api/bookmarks/move",
+        "/api/bookmarks/reorder",
+        "/api/bookmarks/delete",
+        "/api/folders/reorder",
+        "/api/folders/move-up",
+        "/api/folders/rename",
+        "/api/folders/delete",
+        "/api/webdav/config",
+        "/api/auth/passkey/register/options",
+        "/api/auth/passkey/register/verify",
+        "/api/auth/passkey/login/options",
+        "/api/auth/passkey/login/verify",
+    ],
+)
+def test_post_write_apis_require_json(api_client, path):
+    response = api_client.request(
+        "POST",
+        path,
+        payload=None,
+        headers={"Origin": api_client.base_url},
+    )
+    result = response.json()
+
+    assert response.status in {400, 403}
+    assert result["status"] == "error"
+    assert result["error"] == "invalid_content_type"
 
 
 @pytest.mark.parametrize(

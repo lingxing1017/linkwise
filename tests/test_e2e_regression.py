@@ -190,6 +190,113 @@ def test_readonly_auth_icon_replaces_management_button(page, live_server):
     assert page.locator("#bookmark-list-header .bookmark-header-actions").is_hidden()
 
 
+def test_readonly_ui_suppresses_management_controls(page, live_server):
+    page.goto(live_server)
+    page.locator("#cards-wrapper").wait_for()
+
+    assert "readonly-mode" in page.locator("body").get_attribute("class")
+    assert page.locator(".floating-menu").is_hidden()
+    assert page.locator(".bulk-mini-bar").is_hidden()
+    assert page.locator("#bookmark-list-header .bulk-select-all").is_hidden()
+    assert page.locator("#bookmark-list-header .bookmark-header-actions").is_hidden()
+    assert page.locator(".folder-actions").count() == 0
+
+
+def test_mocked_passkey_unlock_reveals_management_ui(page, live_server):
+    state = {"unlocked": False}
+    calls = []
+
+    def route_api(route):
+        url = route.request.url
+        calls.append(url)
+
+        if url.endswith("/api/auth/status"):
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(
+                    {
+                        "public_read": True,
+                        "admin_initialized": True,
+                        "admin_unlocked": state["unlocked"],
+                        "admin_session_expires_at": int(time.time()) + 3600 if state["unlocked"] else None,
+                        "auth_configured": True,
+                        "missing_config": [],
+                    }
+                ),
+            )
+            return
+
+        if url.endswith("/api/auth/passkey/login/options"):
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(
+                    {
+                        "publicKey": {
+                            "challenge": "AQID",
+                            "rpId": "127.0.0.1",
+                            "allowCredentials": [{"type": "public-key", "id": "AQID"}],
+                            "timeout": 300000,
+                            "userVerification": "preferred",
+                        }
+                    }
+                ),
+            )
+            return
+
+        if url.endswith("/api/auth/passkey/login/verify"):
+            state["unlocked"] = True
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(
+                    {
+                        "ok": True,
+                        "admin_unlocked": True,
+                        "expires_at": int(time.time()) + 3600,
+                    }
+                ),
+            )
+            return
+
+        route.continue_()
+
+    page.route("**/api/**", route_api)
+    page.goto(live_server)
+    page.locator("#cards-wrapper").wait_for()
+    page.evaluate(
+        """
+        () => {
+            Object.defineProperty(navigator.credentials, "get", {
+                configurable: true,
+                value: async () => ({
+                    id: "mock-credential",
+                    rawId: new Uint8Array([1, 2, 3]).buffer,
+                    type: "public-key",
+                    response: {
+                        clientDataJSON: new Uint8Array([4]).buffer,
+                        authenticatorData: new Uint8Array([5]).buffer,
+                        signature: new Uint8Array([6]).buffer
+                    }
+                })
+            });
+        }
+        """
+    )
+
+    assert "readonly-mode" in page.locator("body").get_attribute("class")
+    assert page.evaluate("() => navigator.credentials.get.toString().includes('mock-credential')")
+
+    page.locator("#brand-auth-btn").click()
+    page.wait_for_timeout(500)
+    assert any(url.endswith("/api/auth/passkey/login/options") for url in calls)
+    assert any(url.endswith("/api/auth/passkey/login/verify") for url in calls)
+    page.wait_for_function("() => !document.body.classList.contains('readonly-mode')")
+
+    assert page.locator(".floating-menu").is_visible()
+
+
 def test_readonly_bookmark_rows_keep_reading_layout(page, live_server):
     page.goto(live_server)
     page.locator("#cards-wrapper").wait_for()
