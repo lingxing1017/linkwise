@@ -91,11 +91,20 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         )
         .post_async("/api/auth/logout", |req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
-            let config = auth::auth_config(&ctx.env, &req)?;
+            let config = match require_auth_json_state_change(&req, &ctx.env).await? {
+                Ok(config) => config,
+                Err((status, body)) => return json_with_status(&body, status),
+            };
 
-            if let Ok(session) = auth::require_admin_session(&db, &req).await {
-                auth::revoke_admin_session(&db, &session.id, auth::now_timestamp()).await?;
-            }
+            let session = match auth::require_admin_session(&db, &req).await {
+                Ok(session) => session,
+                Err(error) => {
+                    let (status, body) = guard_error(error);
+                    return json_with_status(&body, status);
+                }
+            };
+
+            auth::revoke_admin_session(&db, &session.id, auth::now_timestamp()).await?;
 
             json_with_cookie(
                 &json!({"ok": true, "admin_unlocked": false}),
@@ -394,6 +403,29 @@ async fn require_admin_state_change(
     }
 
     require_admin_session_only(db, req).await
+}
+
+async fn require_auth_json_state_change(
+    req: &Request,
+    env: &Env,
+) -> Result<Result<auth::AuthConfig, (u16, serde_json::Value)>> {
+    let config = auth::auth_config(env, req)?;
+
+    if !config.configured {
+        return Ok(Err(guard_error(auth::AuthGuardError::AuthConfigRequired(
+            config.missing_config,
+        ))));
+    }
+
+    if let Err(error) = auth::ensure_json_request(req) {
+        return Ok(Err(guard_error(error)));
+    }
+
+    if let Err(error) = auth::ensure_same_origin(req, &config) {
+        return Ok(Err(guard_error(error)));
+    }
+
+    Ok(Ok(config))
 }
 
 async fn ensure_auth_post_request(
@@ -784,10 +816,8 @@ async fn passkey_delete(
     env: &Env,
     credential_id: &str,
 ) -> Result<Result<serde_json::Value, (u16, serde_json::Value)>> {
-    let config = auth::auth_config(env, req)?;
-
-    if let Err(error) = auth::ensure_same_origin(req, &config) {
-        return Ok(Err(guard_error(error)));
+    if let Err(error) = require_auth_json_state_change(req, env).await? {
+        return Ok(Err(error));
     }
 
     if let Err(error) = auth::require_admin_session(db, req).await {
@@ -867,11 +897,10 @@ async fn session_revoke(
     env: &Env,
     session_id: &str,
 ) -> Result<Result<(serde_json::Value, Option<String>), (u16, serde_json::Value)>> {
-    let config = auth::auth_config(env, req)?;
-
-    if let Err(error) = auth::ensure_same_origin(req, &config) {
-        return Ok(Err(guard_error(error)));
-    }
+    let config = match require_auth_json_state_change(req, env).await? {
+        Ok(config) => config,
+        Err(error) => return Ok(Err(error)),
+    };
 
     let current_session = match auth::require_admin_session(db, req).await {
         Ok(session) => session,
@@ -904,11 +933,10 @@ async fn session_revoke_all(
     req: &Request,
     env: &Env,
 ) -> Result<Result<(serde_json::Value, String), (u16, serde_json::Value)>> {
-    let config = auth::auth_config(env, req)?;
-
-    if let Err(error) = auth::ensure_same_origin(req, &config) {
-        return Ok(Err(guard_error(error)));
-    }
+    let config = match require_auth_json_state_change(req, env).await? {
+        Ok(config) => config,
+        Err(error) => return Ok(Err(error)),
+    };
 
     if let Err(error) = auth::require_admin_session(db, req).await {
         return Ok(Err(guard_error(error)));

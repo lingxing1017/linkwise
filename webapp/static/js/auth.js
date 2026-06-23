@@ -254,7 +254,13 @@ async function lockAdminSession() {
     if (!confirmed) return;
 
     try {
-        await fetch(`${API_BASE}/auth/logout`, { method: 'POST' });
+        await fetch(`${API_BASE}/auth/logout`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({})
+        });
     } catch (err) {
         console.error('锁定失败:', err);
     }
@@ -282,7 +288,11 @@ window.deletePasskey = async function(credentialId) {
     if (!confirmed) return;
 
     const res = await fetch(`${API_BASE}/auth/passkeys/${encodeURIComponent(credentialId)}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
     });
     const result = await parseApiJson(res, '删除 Passkey 失败');
 
@@ -305,7 +315,11 @@ window.revokeSession = async function(sessionId) {
     if (!confirmed) return;
 
     const res = await fetch(`${API_BASE}/auth/sessions/${encodeURIComponent(sessionId)}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
     });
     const result = await parseApiJson(res, '撤销会话失败');
 
@@ -330,7 +344,11 @@ window.revokeAllSessions = async function() {
     if (!confirmed) return;
 
     const res = await fetch(`${API_BASE}/auth/sessions/revoke-all`, {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
     });
     const result = await parseApiJson(res, '撤销全部会话失败');
 

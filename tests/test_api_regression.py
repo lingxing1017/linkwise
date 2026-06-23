@@ -98,6 +98,52 @@ def test_setup_token_failures_are_rate_limited(api_client):
 
 
 @pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("POST", "/api/auth/logout"),
+        ("DELETE", "/api/auth/passkeys/missing"),
+        ("DELETE", "/api/auth/sessions/missing"),
+        ("POST", "/api/auth/sessions/revoke-all"),
+    ],
+)
+def test_auth_mutations_require_json_content_type(api_client, method, path):
+    response = api_client.request(
+        method,
+        path,
+        payload=None,
+        headers={"Origin": api_client.base_url},
+    )
+    result = response.json()
+
+    assert response.status in {400, 403}
+    assert result["status"] == "error"
+    assert result["error"] == "invalid_content_type"
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        ("POST", "/api/auth/logout", {}),
+        ("DELETE", "/api/auth/passkeys/missing", {}),
+        ("DELETE", "/api/auth/sessions/missing", {}),
+        ("POST", "/api/auth/sessions/revoke-all", {}),
+    ],
+)
+def test_auth_mutations_reject_cross_origin(api_client, method, path, payload):
+    response = api_client.request(
+        method,
+        path,
+        payload,
+        headers={"Origin": "https://evil.example.test"},
+    )
+    result = response.json()
+
+    assert response.status == 403
+    assert result["status"] == "error"
+    assert result["error"] == "invalid_origin"
+
+
+@pytest.mark.parametrize(
     ("method", "path", "payload"),
     [
         ("POST", "/api/bookmarks", bookmark_payload()),
