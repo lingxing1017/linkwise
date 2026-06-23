@@ -560,6 +560,104 @@ pub async fn insert_admin_credential(
     Ok(())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PasskeyRegistrationFinalizeOperation {
+    InsertCredential,
+    MarkChallengeUsed,
+    MarkSetupCompleted,
+    MarkSetupCompletedAt,
+}
+
+const INITIAL_PASSKEY_FINALIZE_OPERATIONS: &[PasskeyRegistrationFinalizeOperation] = &[
+    PasskeyRegistrationFinalizeOperation::InsertCredential,
+    PasskeyRegistrationFinalizeOperation::MarkChallengeUsed,
+    PasskeyRegistrationFinalizeOperation::MarkSetupCompleted,
+    PasskeyRegistrationFinalizeOperation::MarkSetupCompletedAt,
+];
+
+const ADDITIONAL_PASSKEY_FINALIZE_OPERATIONS: &[PasskeyRegistrationFinalizeOperation] = &[
+    PasskeyRegistrationFinalizeOperation::InsertCredential,
+    PasskeyRegistrationFinalizeOperation::MarkChallengeUsed,
+];
+
+fn passkey_registration_finalize_operations(
+    setup_allowed: bool,
+) -> &'static [PasskeyRegistrationFinalizeOperation] {
+    if setup_allowed {
+        INITIAL_PASSKEY_FINALIZE_OPERATIONS
+    } else {
+        ADDITIONAL_PASSKEY_FINALIZE_OPERATIONS
+    }
+}
+
+pub async fn finalize_passkey_registration(
+    db: &D1Database,
+    credential: &NewAdminCredential,
+    challenge_id: &str,
+    now: i64,
+    setup_allowed: bool,
+) -> Result<()> {
+    let mut statements = Vec::new();
+    let completed_at = now.to_string();
+
+    for operation in passkey_registration_finalize_operations(setup_allowed) {
+        let statement = match operation {
+            PasskeyRegistrationFinalizeOperation::InsertCredential => {
+                let args = [
+                    D1Type::Text(&credential.credential_id),
+                    D1Type::Text(&credential.public_key),
+                    D1Type::Integer(credential.sign_count as i32),
+                    D1Type::Text(&credential.name),
+                    D1Type::Integer(credential.created_at as i32),
+                ];
+                db.prepare(
+                    r#"
+                    INSERT INTO admin_credentials
+                        (credential_id, public_key, sign_count, name, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    "#,
+                )
+                .bind_refs(&args)?
+            }
+            PasskeyRegistrationFinalizeOperation::MarkChallengeUsed => {
+                let args = [D1Type::Integer(now as i32), D1Type::Text(challenge_id)];
+                db.prepare("UPDATE auth_challenges SET used_at = ? WHERE id = ?")
+                    .bind_refs(&args)?
+            }
+            PasskeyRegistrationFinalizeOperation::MarkSetupCompleted => {
+                let args = [D1Type::Text(SETUP_COMPLETED_KEY), D1Type::Text("true")];
+                db.prepare(
+                    r#"
+                    INSERT INTO settings (key, value)
+                    VALUES (?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                    "#,
+                )
+                .bind_refs(&args)?
+            }
+            PasskeyRegistrationFinalizeOperation::MarkSetupCompletedAt => {
+                let args = [
+                    D1Type::Text(SETUP_COMPLETED_AT_KEY),
+                    D1Type::Text(&completed_at),
+                ];
+                db.prepare(
+                    r#"
+                    INSERT INTO settings (key, value)
+                    VALUES (?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                    "#,
+                )
+                .bind_refs(&args)?
+            }
+        };
+
+        statements.push(statement);
+    }
+
+    db.batch(statements).await?;
+    Ok(())
+}
+
 pub async fn update_admin_credential_usage(
     db: &D1Database,
     credential_id: &str,
@@ -858,4 +956,33 @@ pub async fn record_setup_auth_failure(db: &D1Database, bucket: &str, now: i64) 
     }
 
     record_auth_failure(db, bucket, now, locked_until).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn first_passkey_registration_includes_setup_writes() {
+        assert_eq!(
+            passkey_registration_finalize_operations(true),
+            &[
+                PasskeyRegistrationFinalizeOperation::InsertCredential,
+                PasskeyRegistrationFinalizeOperation::MarkChallengeUsed,
+                PasskeyRegistrationFinalizeOperation::MarkSetupCompleted,
+                PasskeyRegistrationFinalizeOperation::MarkSetupCompletedAt,
+            ]
+        );
+    }
+
+    #[test]
+    fn additional_passkey_registration_skips_setup_writes() {
+        assert_eq!(
+            passkey_registration_finalize_operations(false),
+            &[
+                PasskeyRegistrationFinalizeOperation::InsertCredential,
+                PasskeyRegistrationFinalizeOperation::MarkChallengeUsed,
+            ]
+        );
+    }
 }
