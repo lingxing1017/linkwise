@@ -11,8 +11,6 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LOCAL_D1_DIR = ROOT / "data"
-
 
 class ApiResponse:
     def __init__(self, status, headers, body):
@@ -103,7 +101,7 @@ def browser_name():
 
 
 @pytest.fixture(scope="session")
-def live_server():
+def live_server(tmp_path_factory):
     base_url = (
         os.environ.get("LINKWISE_API_BASE_URL", "").strip()
         or os.environ.get("LINKWISE_E2E_BASE_URL", "").strip()
@@ -113,7 +111,7 @@ def live_server():
         yield base_url
         return
 
-    LOCAL_D1_DIR.mkdir(parents=True, exist_ok=True)
+    local_d1_dir = tmp_path_factory.mktemp("linkwise-d1")
     port = find_free_port()
     process = subprocess.Popen(
         [
@@ -126,7 +124,7 @@ def live_server():
             "--port",
             str(port),
             "--persist-to",
-            str(LOCAL_D1_DIR),
+            str(local_d1_dir),
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
