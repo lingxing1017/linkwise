@@ -18,6 +18,7 @@ function closeAppDialog(result) {
 function openAppDialog({
     title = '提示',
     message = '',
+    content = null,
     confirmText = '确定',
     cancelText = '取消',
     showCancel = false,
@@ -32,7 +33,11 @@ function openAppDialog({
     }
 
     appDialogTitle.textContent = title;
-    appDialogMessage.textContent = message;
+    if (content instanceof Node) {
+        appDialogMessage.replaceChildren(content);
+    } else {
+        appDialogMessage.textContent = message;
+    }
     appDialogConfirm.textContent = confirmText;
     appDialogCancel.textContent = cancelText;
     setElementVisible(appDialogCancel, showCancel);

@@ -47,6 +47,41 @@ function formatRemainingTime(seconds) {
     return `${minutes}:${String(remainder).padStart(2, '0')}`;
 }
 
+function getSelectedSessionMaxAgeSeconds() {
+    const select = document.getElementById('auth-session-duration');
+    const value = select ? Number(select.value) : 0;
+
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return Math.min(value, 86400);
+}
+
+async function chooseAuthSessionMaxAge(title) {
+    const content = document.createElement('div');
+    content.className = 'auth-session-options';
+    content.innerHTML = `
+        <label class="auth-session-duration-field" for="auth-session-duration">
+            <span>管理模式有效期</span>
+            <select id="auth-session-duration">
+                <option value="">浏览器会话</option>
+                <option value="3600">1 小时</option>
+                <option value="43200">12 小时</option>
+                <option value="86400">24 小时</option>
+            </select>
+        </label>
+    `;
+
+    const confirmed = await openAppDialog({
+        title,
+        content,
+        confirmText: '继续',
+        cancelText: '取消',
+        showCancel: true
+    });
+
+    if (!confirmed) return undefined;
+    return getSelectedSessionMaxAgeSeconds();
+}
+
 function syncAuthIcon() {
     const mode = getAdminMode();
     const scheme = getColorScheme();
@@ -149,6 +184,9 @@ async function initializeFirstPasskey() {
 }
 
 async function unlockWithPasskey() {
+    const sessionMaxAgeSeconds = await chooseAuthSessionMaxAge('解锁管理模式');
+    if (sessionMaxAgeSeconds === undefined) return;
+
     try {
         const optionsRes = await fetch(`${API_BASE}/auth/passkey/login/options`, {
             method: 'POST',
@@ -176,6 +214,7 @@ async function unlockWithPasskey() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
+                session_max_age_seconds: sessionMaxAgeSeconds,
                 credential: publicKeyCredentialToJSON(credential)
             })
         });
@@ -195,6 +234,9 @@ async function unlockWithPasskey() {
 }
 
 async function registerPasskey({ setupToken = null, name = '我的 Passkey' } = {}) {
+    const sessionMaxAgeSeconds = await chooseAuthSessionMaxAge('Passkey 注册');
+    if (sessionMaxAgeSeconds === undefined) return;
+
     try {
         const optionsRes = await fetch(`${API_BASE}/auth/passkey/register/options`, {
             method: 'POST',
@@ -226,6 +268,7 @@ async function registerPasskey({ setupToken = null, name = '我的 Passkey' } = 
             },
             body: JSON.stringify({
                 name,
+                session_max_age_seconds: sessionMaxAgeSeconds,
                 credential: publicKeyCredentialToJSON(credential)
             })
         });
