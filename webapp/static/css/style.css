@@ -918,6 +918,27 @@ body.readonly-mode .brand-settings-btn {
     justify-self: start;
 }
 
+body.readonly-mode .bookmark-list-header,
+body.readonly-mode .bookmark-row {
+    grid-template-columns: 42px minmax(0, 1fr) clamp(180px, 22vw, 320px);
+}
+
+body.readonly-mode .bulk-select-all,
+body.readonly-mode .bookmark-header-actions,
+body.readonly-mode .bookmark-select,
+body.readonly-mode .bookmark-actions {
+    display: none;
+}
+
+body.readonly-mode .bookmark-header-title {
+    grid-column: 2;
+}
+
+body.readonly-mode .bookmark-header-folder,
+body.readonly-mode .bookmark-folder {
+    grid-column: 3;
+}
+
 .bulk-move-count,
 .bulk-mini-count {
     color: var(--muted);
@@ -1615,8 +1636,7 @@ body[data-density="compact"] .folder-row {
 }
 
 body.readonly-mode .floating-menu,
-body.readonly-mode .bulk-mini-bar,
-body.readonly-mode .bookmark-list-header {
+body.readonly-mode .bulk-mini-bar {
     display: none;
 }
 
@@ -1892,6 +1912,15 @@ body.readonly-mode .bookmark-list-header {
         grid-row: 2;
         margin-top: 6px;
         max-width: min(100%, 260px);
+    }
+
+    body.readonly-mode .bookmark-row {
+        grid-template-columns: 32px minmax(0, 1fr);
+    }
+
+    body.readonly-mode .bookmark-text,
+    body.readonly-mode .bookmark-folder {
+        grid-column: 2;
     }
 
     .bookmark-actions {

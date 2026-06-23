@@ -185,10 +185,46 @@ def test_readonly_auth_icon_replaces_management_button(page, live_server):
         page.locator(".floating-add-btn").is_hidden()
         or "readonly-mode" in page.locator("body").get_attribute("class")
     )
-    assert (
-        page.locator("#bookmark-list-header").is_hidden()
-        or "show" not in page.locator("#bookmark-list-header").get_attribute("class")
+    assert page.locator("#bookmark-list-header").is_visible()
+    assert page.locator("#bookmark-list-header .bulk-select-all").is_hidden()
+    assert page.locator("#bookmark-list-header .bookmark-header-actions").is_hidden()
+
+
+def test_readonly_bookmark_rows_keep_reading_layout(page, live_server):
+    page.goto(live_server)
+    page.locator("#cards-wrapper").wait_for()
+
+    page.evaluate(
+        """
+        () => {
+            authState = {
+                public_read: true,
+                admin_initialized: true,
+                admin_unlocked: false,
+                admin_session_expires_at: null,
+                auth_configured: true,
+                missing_config: []
+            };
+            bookmarks = [{
+                id: "readonly-row",
+                title: "Readonly Bookmark Title",
+                url: "https://readonly.example.test/path",
+                folder: "Other Bookmarks / android"
+            }];
+            selectedFolder = ALL_BOOKMARKS_VIEW;
+            syncAuthUi();
+        }
+        """
     )
+
+    row = page.locator(".bookmark-row", has=page.locator(".bookmark-title", has_text="Readonly Bookmark Title"))
+    row.wait_for()
+
+    assert row.locator(".bookmark-title").is_visible()
+    assert row.locator(".bookmark-domain").is_visible()
+    assert row.locator(".bookmark-folder").is_visible()
+    assert row.locator(".bookmark-select").count() == 0
+    assert row.locator(".bookmark-actions").count() == 0
 
 
 def test_unlocked_auth_icon_tooltip_has_only_time(page, live_server):

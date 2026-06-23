@@ -55,7 +55,7 @@ function updateBulkMoveBar() {
     }
 
     if (bookmarkListHeader) {
-        setClassVisible(bookmarkListHeader, 'show', isAdminUnlocked());
+        setClassVisible(bookmarkListHeader, 'show', true);
     }
 
     if (bulkSelectAll) {
