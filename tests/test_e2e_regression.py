@@ -227,6 +227,48 @@ def test_readonly_bookmark_rows_keep_reading_layout(page, live_server):
     assert row.locator(".bookmark-actions").count() == 0
 
 
+def test_settings_dialog_stays_inside_viewport(page, live_server):
+    page.goto(live_server)
+    page.locator("#cards-wrapper").wait_for()
+
+    page.evaluate("() => openOverlay(settingsOverlay)")
+
+    box_metrics = page.locator(".settings-box").evaluate(
+        """
+        (node) => {
+            const rect = node.getBoundingClientRect();
+            const style = getComputedStyle(node);
+            return {
+                top: rect.top,
+                bottom: rect.bottom,
+                viewportHeight: window.innerHeight,
+                overflowY: style.overflowY
+            };
+        }
+        """
+    )
+    assert box_metrics["top"] >= 0
+    assert box_metrics["bottom"] <= box_metrics["viewportHeight"]
+    assert box_metrics["overflowY"] == "auto"
+
+    action_button_metrics = page.locator(".auth-management-actions .btn-save").evaluate(
+        """
+        (node) => {
+            const rect = node.getBoundingClientRect();
+            const style = getComputedStyle(node);
+            return {
+                height: rect.height,
+                radius: style.borderRadius,
+                borderStyle: style.borderStyle
+            };
+        }
+        """
+    )
+    assert action_button_metrics["height"] >= 36
+    assert action_button_metrics["radius"] != "0px"
+    assert action_button_metrics["borderStyle"] == "none"
+
+
 def test_unlocked_auth_icon_tooltip_has_only_time(page, live_server):
     page.goto(live_server)
     page.locator("#cards-wrapper").wait_for()
