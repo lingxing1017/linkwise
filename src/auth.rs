@@ -16,6 +16,9 @@ pub const SETUP_COMPLETED_AT_KEY: &str = "auth.setup_completed_at";
 pub const PURPOSE_PASSKEY_REGISTRATION: &str = "passkey_registration";
 pub const PURPOSE_PASSKEY_LOGIN: &str = "passkey_login";
 pub const WEB_SESSION_MAX_AGE_SECONDS: i64 = 24 * 60 * 60;
+pub const AUTH_RATE_LIMIT_MAX_FAILURES: i64 = 5;
+pub const AUTH_RATE_LIMIT_WINDOW_SECONDS: i64 = 5 * 60;
+pub const AUTH_RATE_LIMIT_LOCK_SECONDS: i64 = 5 * 60;
 
 #[derive(Debug, Clone)]
 pub struct NewAdminCredential {
@@ -318,6 +321,20 @@ pub fn parse_cookie_value(header: &str, name: &str) -> Option<String> {
     }
 
     None
+}
+
+pub fn setup_rate_limit_bucket(req: &Request) -> String {
+    let ip = req
+        .headers()
+        .get("CF-Connecting-IP")
+        .ok()
+        .flatten()
+        .or_else(|| req.headers().get("X-Forwarded-For").ok().flatten())
+        .and_then(|value| value.split(',').next().map(str::trim).map(str::to_string))
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    format!("setup:{ip}")
 }
 
 pub fn is_unsafe_method(method: &Method) -> bool {
@@ -804,4 +821,40 @@ pub async fn clear_auth_rate_limit(db: &D1Database, bucket: &str) -> Result<()> 
         .await?;
 
     Ok(())
+}
+
+pub async fn is_auth_rate_limited(db: &D1Database, bucket: &str, now: i64) -> Result<bool> {
+    let Some(limit) = get_auth_rate_limit(db, bucket).await? else {
+        return Ok(false);
+    };
+
+    if limit.locked_until.is_some_and(|locked_until| locked_until > now) {
+        return Ok(true);
+    }
+
+    Ok(limit.failed_count >= AUTH_RATE_LIMIT_MAX_FAILURES
+        && now - limit.first_failed_at <= AUTH_RATE_LIMIT_WINDOW_SECONDS)
+}
+
+pub async fn record_setup_auth_failure(db: &D1Database, bucket: &str, now: i64) -> Result<()> {
+    let existing = get_auth_rate_limit(db, bucket).await?;
+    let within_window = existing
+        .as_ref()
+        .is_some_and(|limit| now - limit.first_failed_at <= AUTH_RATE_LIMIT_WINDOW_SECONDS);
+    let next_count = if within_window {
+        existing
+            .as_ref()
+            .map(|limit| limit.failed_count + 1)
+            .unwrap_or(1)
+    } else {
+        1
+    };
+    let locked_until =
+        (next_count >= AUTH_RATE_LIMIT_MAX_FAILURES).then_some(now + AUTH_RATE_LIMIT_LOCK_SECONDS);
+
+    if !within_window {
+        clear_auth_rate_limit(db, bucket).await?;
+    }
+
+    record_auth_failure(db, bucket, now, locked_until).await
 }

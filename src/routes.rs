@@ -433,6 +433,15 @@ async fn passkey_register_options(
     let setup_allowed = auth::can_use_setup_token(db).await?;
 
     if setup_allowed {
+        let rate_limit_bucket = auth::setup_rate_limit_bucket(req);
+
+        if auth::is_auth_rate_limited(db, &rate_limit_bucket, now).await? {
+            return Ok(Err((
+                429,
+                auth_error(429, "rate_limited", "认证尝试过于频繁，请稍后再试"),
+            )));
+        }
+
         let setup_token = env
             .secret(auth::SETUP_TOKEN_BINDING)
             .ok()
@@ -447,11 +456,14 @@ async fn passkey_register_options(
                 .filter(|value| !value.is_empty())
                 != Some(setup_token.as_str())
         {
+            auth::record_setup_auth_failure(db, &rate_limit_bucket, now).await?;
             return Ok(Err((
                 403,
                 auth_error(403, "auth_required", "无法初始化管理权限"),
             )));
         }
+
+        auth::clear_auth_rate_limit(db, &rate_limit_bucket).await?;
     } else if let Err(error) = auth::require_admin_session(db, req).await {
         return Ok(Err(guard_error(error)));
     }

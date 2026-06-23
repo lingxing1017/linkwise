@@ -66,6 +66,37 @@ def test_auth_status_returns_public_read_state(api_client):
     assert "admin_initialized" in result
 
 
+def test_setup_token_failures_are_rate_limited(api_client):
+    marker = unique_id("setup-rate")
+    headers = {"CF-Connecting-IP": f"198.51.100.{int(time.time_ns() % 200) + 1}"}
+    payload = {"setup_token": f"wrong-token-{marker}", "name": "Bad Setup"}
+
+    for _ in range(5):
+        response = api_client.request(
+            "POST",
+            "/api/auth/passkey/register/options",
+            payload,
+            headers=headers,
+        )
+        result = response.json()
+
+        assert response.status == 403
+        assert result["status"] == "error"
+        assert result["error"] in {"auth_required", "setup_not_allowed"}
+
+    response = api_client.request(
+        "POST",
+        "/api/auth/passkey/register/options",
+        payload,
+        headers=headers,
+    )
+    result = response.json()
+
+    assert response.status == 429
+    assert result["status"] == "error"
+    assert result["error"] == "rate_limited"
+
+
 @pytest.mark.parametrize(
     ("method", "path", "payload"),
     [
