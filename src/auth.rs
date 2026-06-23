@@ -78,7 +78,8 @@ impl AuthGuardError {
     pub fn status(&self) -> u16 {
         match self {
             Self::AdminSessionRequired => 401,
-            Self::AuthConfigRequired(_) | Self::InvalidContentType | Self::InvalidOrigin => 403,
+            Self::InvalidContentType => 400,
+            Self::AuthConfigRequired(_) | Self::InvalidOrigin => 403,
         }
     }
 

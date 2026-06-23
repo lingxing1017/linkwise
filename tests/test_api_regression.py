@@ -193,6 +193,20 @@ def test_post_write_apis_require_json(api_client, path):
     assert result["error"] == "invalid_content_type"
 
 
+def test_invalid_content_type_returns_400(api_client):
+    response = api_client.request(
+        "POST",
+        "/api/auth/passkey/login/options",
+        payload=None,
+        headers={"Origin": api_client.base_url},
+    )
+    result = response.json()
+
+    assert response.status == 400
+    assert result["status"] == "error"
+    assert result["error"] == "invalid_content_type"
+
+
 @pytest.mark.parametrize(
     ("method", "path", "payload"),
     [
