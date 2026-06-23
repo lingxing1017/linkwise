@@ -272,57 +272,69 @@
         <div class="dialog-box settings-box">
             <div class="dialog-title">设置</div>
 
-            <div class="settings-section">
-                <div class="settings-section-title">备份同步</div>
+            <div class="settings-tabs" role="tablist" aria-label="设置分类">
+                <button type="button" class="settings-tab active" id="settings-tab-backup" role="tab" aria-selected="true" aria-controls="settings-panel-backup" onclick="switchSettingsTab('backup')">备份同步</button>
+                <button type="button" class="settings-tab" id="settings-tab-auth" role="tab" aria-selected="false" aria-controls="settings-panel-auth" onclick="switchSettingsTab('auth')">认证管理</button>
+            </div>
 
-                <div class="input-group">
-                    <label>WebDAV 地址</label>
-                    <input type="url" id="webdav-url" placeholder="https://example.com/dav">
-                </div>
+            <div class="settings-panel active" id="settings-panel-backup" role="tabpanel" aria-labelledby="settings-tab-backup">
+                <div class="settings-section">
+                    <div class="settings-section-title">WebDAV 配置</div>
 
-                <div class="input-group">
-                    <label>用户名</label>
-                    <input type="text" id="webdav-username" autocomplete="username" placeholder="WebDAV 用户名">
-                </div>
+                    <div class="input-group">
+                        <label>WebDAV 地址</label>
+                        <input type="url" id="webdav-url" placeholder="https://example.com/dav">
+                    </div>
 
-                <div class="input-group">
-                    <label>密码</label>
-                    <input type="password" id="webdav-password" autocomplete="current-password" placeholder="WebDAV 密码或 App Password">
-                </div>
+                    <div class="input-group">
+                        <label>用户名</label>
+                        <input type="text" id="webdav-username" autocomplete="username" placeholder="WebDAV 用户名">
+                    </div>
 
-                <div class="input-group">
-                    <label>远程目录</label>
-                    <input type="text" id="webdav-remote-dir" placeholder="例如：Linkwise">
-                </div>
+                    <div class="input-group">
+                        <label>密码</label>
+                        <input type="password" id="webdav-password" autocomplete="current-password" placeholder="WebDAV 密码或 App Password">
+                    </div>
 
-                <div class="input-group">
-                    <label>备份文件名</label>
-                    <input type="text" id="webdav-filename" placeholder="linkwise-bookmarks.html">
+                    <div class="input-group">
+                        <label>远程目录</label>
+                        <input type="text" id="webdav-remote-dir" placeholder="例如：Linkwise">
+                    </div>
+
+                    <div class="input-group">
+                        <label>备份文件名</label>
+                        <input type="text" id="webdav-filename" placeholder="linkwise-bookmarks.html">
+                    </div>
+
+                    <div class="settings-panel-actions">
+                        <button type="button" class="btn-save" onclick="saveWebdavConfig()">保存配置</button>
+                    </div>
                 </div>
             </div>
 
-            <div class="settings-section auth-management-section">
-                <div class="settings-section-title">认证管理</div>
+            <div class="settings-panel" id="settings-panel-auth" role="tabpanel" aria-labelledby="settings-tab-auth" hidden>
+                <div class="settings-section auth-management-section">
+                    <div class="settings-section-title">Passkey 与会话</div>
 
-                <div class="auth-management-actions">
-                    <button type="button" class="btn-save" onclick="addPasskey()">新增 Passkey</button>
-                    <button type="button" class="btn-close" onclick="revokeAllSessions()">撤销全部会话</button>
-                </div>
+                    <div class="auth-management-actions">
+                        <button type="button" class="btn-save" onclick="addPasskey()">新增 Passkey</button>
+                        <button type="button" class="btn-close" onclick="revokeAllSessions()">撤销全部会话</button>
+                    </div>
 
-                <div class="auth-list-block">
-                    <div class="auth-list-title">Passkey</div>
-                    <div class="auth-list" id="auth-passkey-list"></div>
-                </div>
+                    <div class="auth-list-block">
+                        <div class="auth-list-title">Passkey</div>
+                        <div class="auth-list" id="auth-passkey-list"></div>
+                    </div>
 
-                <div class="auth-list-block">
-                    <div class="auth-list-title">设备 / Session</div>
-                    <div class="auth-list" id="auth-session-list"></div>
+                    <div class="auth-list-block">
+                        <div class="auth-list-title">设备 / Session</div>
+                        <div class="auth-list" id="auth-session-list"></div>
+                    </div>
                 </div>
             </div>
 
             <div class="dialog-actions">
                 <button type="button" class="btn-close" onclick="closeSettings()">关闭</button>
-                <button type="button" class="btn-save" onclick="saveWebdavConfig()">保存配置</button>
             </div>
         </div>
     </div>

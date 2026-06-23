@@ -42,10 +42,27 @@ function getWebdavConfigPayload() {
     };
 }
 
+window.switchSettingsTab = function(tabName) {
+    const activeName = tabName === 'auth' ? 'auth' : 'backup';
+
+    document.querySelectorAll('.settings-tab').forEach((tab) => {
+        const active = tab.id === `settings-tab-${activeName}`;
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+
+    document.querySelectorAll('.settings-panel').forEach((panel) => {
+        const active = panel.id === `settings-panel-${activeName}`;
+        panel.classList.toggle('active', active);
+        panel.hidden = !active;
+    });
+};
+
 window.openSettings = async function() {
     if (!requireAdminUiAction()) return;
 
     openOverlay(settingsOverlay);
+    switchSettingsTab('backup');
     closeFloatingMenu();
 
     try {

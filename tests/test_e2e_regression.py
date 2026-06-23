@@ -231,7 +231,14 @@ def test_settings_dialog_stays_inside_viewport(page, live_server):
     page.goto(live_server)
     page.locator("#cards-wrapper").wait_for()
 
-    page.evaluate("() => openOverlay(settingsOverlay)")
+    page.evaluate(
+        """
+        () => {
+            openOverlay(settingsOverlay);
+            switchSettingsTab("backup");
+        }
+        """
+    )
 
     box_metrics = page.locator(".settings-box").evaluate(
         """
@@ -249,7 +256,41 @@ def test_settings_dialog_stays_inside_viewport(page, live_server):
     )
     assert box_metrics["top"] >= 0
     assert box_metrics["bottom"] <= box_metrics["viewportHeight"]
-    assert box_metrics["overflowY"] == "auto"
+    assert box_metrics["overflowY"] == "hidden"
+
+    assert page.locator("#settings-tab-backup").get_attribute("aria-selected") == "true"
+    assert page.locator("#settings-panel-backup").is_visible()
+    assert page.locator("#settings-panel-auth").is_hidden()
+    assert page.locator("#settings-panel-backup .btn-save", has_text="保存配置").is_visible()
+    assert page.locator(".settings-box > .dialog-actions .btn-save").count() == 0
+    assert page.locator("#settings-panel-backup").evaluate(
+        "node => getComputedStyle(node).overflowY"
+    ) == "auto"
+    fixed_regions = page.evaluate(
+        """
+        () => {
+            const tabs = document.querySelector(".settings-tabs").getBoundingClientRect();
+            const actions = document.querySelector(".settings-box > .dialog-actions").getBoundingClientRect();
+            const panel = document.querySelector("#settings-panel-backup");
+            panel.scrollTop = 120;
+            const nextTabs = document.querySelector(".settings-tabs").getBoundingClientRect();
+            const nextActions = document.querySelector(".settings-box > .dialog-actions").getBoundingClientRect();
+            return {
+                tabsTop: tabs.top,
+                nextTabsTop: nextTabs.top,
+                actionsTop: actions.top,
+                nextActionsTop: nextActions.top
+            };
+        }
+        """
+    )
+    assert fixed_regions["tabsTop"] == fixed_regions["nextTabsTop"]
+    assert fixed_regions["actionsTop"] == fixed_regions["nextActionsTop"]
+
+    page.locator("#settings-tab-auth").click()
+    assert page.locator("#settings-tab-auth").get_attribute("aria-selected") == "true"
+    assert page.locator("#settings-panel-auth").is_visible()
+    assert page.locator("#settings-panel-backup").is_hidden()
 
     action_button_metrics = page.locator(".auth-management-actions .btn-save").evaluate(
         """

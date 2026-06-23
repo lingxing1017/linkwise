@@ -1520,9 +1520,10 @@ body[data-density="compact"] .folder-row {
 
 .settings-box {
     width: min(92vw, 540px);
+    display: flex;
+    flex-direction: column;
     max-height: calc(100vh - 56px);
-    overflow-y: auto;
-    overscroll-behavior: contain;
+    overflow: hidden;
 }
 
 .settings-section {
@@ -1532,8 +1533,54 @@ body[data-density="compact"] .folder-row {
     padding: 18px 18px 2px;
 }
 
-.settings-section + .settings-section {
-    margin-top: 14px;
+.settings-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 16px;
+    padding: 4px;
+    border-radius: 13px;
+    background: var(--panel-soft);
+}
+
+.settings-tab {
+    min-height: 38px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-weight: 800;
+}
+
+.settings-tab.active {
+    background: var(--panel);
+    color: var(--accent);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+}
+
+.settings-tab:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.settings-panel[hidden] {
+    display: none;
+}
+
+.settings-panel.active {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
+}
+
+.settings-panel-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
+    padding-bottom: 16px;
 }
 
 .settings-section-title {
@@ -1548,8 +1595,6 @@ body[data-density="compact"] .folder-row {
 }
 
 .settings-box > .dialog-actions {
-    position: sticky;
-    bottom: -28px;
     margin: 20px -28px -28px;
     padding: 16px 28px 28px;
     background: var(--panel);
