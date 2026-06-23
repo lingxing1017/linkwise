@@ -193,6 +193,10 @@ form.addEventListener('submit', async function(event) {
 
 search.addEventListener('input', renderCards);
 
+if (darkModeQuery) {
+    darkModeQuery.addEventListener('change', syncAuthUi);
+}
+
 applyBookmarkDensity(getStoredBookmarkDensity());
 syncTopbarHeight();
 

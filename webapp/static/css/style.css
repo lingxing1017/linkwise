@@ -147,6 +147,82 @@ button {
     box-shadow: 0 12px 24px rgba(79, 124, 255, 0.25);
 }
 
+.brand-auth-btn {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    flex: 0 0 56px;
+    border: 0;
+    padding: 0;
+    border-radius: 14px;
+    background: transparent;
+    cursor: pointer;
+}
+
+.brand-auth-icon {
+    display: block;
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    object-fit: cover;
+}
+
+.brand-auth-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+
+.brand-auth-tooltip {
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 8px);
+    z-index: 20;
+    min-width: 44px;
+    padding: 5px 8px;
+    border-radius: 8px;
+    background: rgba(16, 20, 30, 0.92);
+    color: #fff;
+    font-size: 12px;
+    line-height: 1;
+    text-align: center;
+    transform: translateX(-50%) translateY(-2px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.brand-auth-btn.unlocked:hover .brand-auth-tooltip,
+.brand-auth-btn.unlocked:focus-visible .brand-auth-tooltip {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.brand-auth-ring {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    opacity: 0;
+    background:
+        conic-gradient(#f5c542 var(--auth-ring-progress, 0deg), rgba(245, 197, 66, 0.18) 0deg);
+    box-shadow: 0 0 0 2px var(--sidebar-bg);
+    transition: opacity 0.16s ease;
+}
+
+.brand-auth-ring::after {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    border-radius: 50%;
+    background: var(--sidebar-bg);
+}
+
+.brand-auth-btn.expiring .brand-auth-ring {
+    opacity: 1;
+}
+
 .brand-title {
     font-size: 17px;
     font-weight: 800;
@@ -514,26 +590,6 @@ body.readonly-mode .brand-settings-btn {
     display: flex;
     align-items: center;
     gap: 10px;
-}
-
-.auth-action-btn {
-    height: 42px;
-    border: 1px solid var(--focus-border);
-    border-radius: 999px;
-    background: var(--accent-soft);
-    color: var(--accent);
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 700;
-    padding: 0 14px;
-    white-space: nowrap;
-    transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
-}
-
-.auth-action-btn:hover {
-    background: var(--accent);
-    color: white;
-    box-shadow: 0 8px 20px rgba(79, 124, 255, 0.2);
 }
 
 .auth-management-actions {

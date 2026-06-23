@@ -1,3 +1,15 @@
+const AUTH_ICON_ASSETS = {
+    locked: {
+        light: 'static/img/linkwise-locked-light.png',
+        dark: 'static/img/linkwise-locked-dark.png'
+    },
+    unlocked: {
+        light: 'static/img/linkwise-unlocked-light.png',
+        dark: 'static/img/linkwise-unlocked-dark.png'
+    }
+};
+const AUTH_RING_THRESHOLD_SECONDS = 5 * 60;
+
 function isAdminUnlocked() {
     return Boolean(authState && authState.admin_unlocked);
 }
@@ -6,27 +18,63 @@ function isReadOnlyMode() {
     return !isAdminUnlocked();
 }
 
-function getAuthActionLabel() {
-    if (authState.admin_unlocked) {
-        if (authState.admin_session_expires_at) {
-            const remaining = Math.max(0, authState.admin_session_expires_at - Math.floor(Date.now() / 1000));
-            const minutes = Math.floor(remaining / 60);
-            const seconds = remaining % 60;
-            return `管理模式 · ${minutes}:${String(seconds).padStart(2, '0')}`;
-        }
+function getAdminMode() {
+    if (authState.admin_unlocked) return 'unlocked';
+    return authState.admin_initialized ? 'locked' : 'uninitialized';
+}
 
-        return '管理模式';
+function getColorScheme() {
+    return darkModeQuery && darkModeQuery.matches ? 'dark' : 'light';
+}
+
+function getRemainingAdminSeconds() {
+    if (!authState.admin_unlocked || !authState.admin_session_expires_at) return null;
+    return Math.max(0, authState.admin_session_expires_at - Math.floor(Date.now() / 1000));
+}
+
+function formatRemainingTime(seconds) {
+    const safeSeconds = Math.max(0, Number(seconds) || 0);
+    const minutes = Math.floor(safeSeconds / 60);
+    const remainder = safeSeconds % 60;
+    return `${minutes}:${String(remainder).padStart(2, '0')}`;
+}
+
+function syncAuthIcon() {
+    const mode = getAdminMode();
+    const scheme = getColorScheme();
+    const iconState = mode === 'unlocked' ? 'unlocked' : 'locked';
+    const remaining = getRemainingAdminSeconds();
+
+    if (brandAuthIcon) {
+        brandAuthIcon.src = AUTH_ICON_ASSETS[iconState][scheme];
     }
 
-    return authState.admin_initialized ? '解锁管理模式' : '初始化管理权限';
+    if (brandAuthButton) {
+        const label = mode === 'unlocked'
+            ? '锁定'
+            : mode === 'uninitialized'
+                ? '初始化管理权限'
+                : '解锁管理模式';
+        brandAuthButton.setAttribute('aria-label', label);
+        brandAuthButton.classList.toggle('unlocked', mode === 'unlocked');
+        brandAuthButton.classList.toggle('expiring', Boolean(remaining !== null && remaining <= AUTH_RING_THRESHOLD_SECONDS));
+    }
+
+    if (brandAuthTooltip) {
+        brandAuthTooltip.textContent = remaining === null ? '' : formatRemainingTime(remaining);
+    }
+
+    if (brandAuthRing) {
+        const ratio = remaining === null || remaining > AUTH_RING_THRESHOLD_SECONDS
+            ? 0
+            : Math.max(0, Math.min(1, remaining / AUTH_RING_THRESHOLD_SECONDS));
+        brandAuthRing.style.setProperty('--auth-ring-progress', `${ratio * 360}deg`);
+    }
 }
 
 function syncAuthUi() {
     document.body.classList.toggle('readonly-mode', isReadOnlyMode());
-
-    if (authActionButton) {
-        authActionButton.textContent = getAuthActionLabel();
-    }
+    syncAuthIcon();
 
     if (isReadOnlyMode()) {
         selectedBookmarkIds.clear();
@@ -190,9 +238,9 @@ async function registerPasskey({ setupToken = null, name = '我的 Passkey' } = 
 }
 
 async function lockAdminSession() {
-    const confirmed = await showConfirm('锁定当前管理模式吗？', {
-        title: '锁定管理模式',
-        confirmText: '锁定'
+    const confirmed = await showConfirm('锁定', {
+        title: '锁定',
+        confirmText: '确定'
     });
 
     if (!confirmed) return;
