@@ -18,6 +18,14 @@ function isReadOnlyMode() {
     return !isAdminUnlocked();
 }
 
+function canManage() {
+    return isAdminUnlocked();
+}
+
+function requireAdminUiAction() {
+    return canManage();
+}
+
 function getAdminMode() {
     if (authState.admin_unlocked) return 'unlocked';
     return authState.admin_initialized ? 'locked' : 'uninitialized';
@@ -256,14 +264,14 @@ async function lockAdminSession() {
 }
 
 window.addPasskey = async function() {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     const name = window.prompt('为新的 Passkey 命名', '新的 Passkey') || '新的 Passkey';
     await registerPasskey({ name });
 };
 
 window.deletePasskey = async function(credentialId) {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     const confirmed = await showConfirm('删除这个 Passkey 吗？关联会话也会被撤销。', {
         title: '删除 Passkey',
@@ -287,7 +295,7 @@ window.deletePasskey = async function(credentialId) {
 };
 
 window.revokeSession = async function(sessionId) {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     const confirmed = await showConfirm('撤销这个会话吗？', {
         title: '撤销会话',
@@ -311,7 +319,7 @@ window.revokeSession = async function(sessionId) {
 };
 
 window.revokeAllSessions = async function() {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     const confirmed = await showConfirm('撤销所有会话吗？当前浏览器也会退出管理模式。', {
         title: '撤销全部会话',
@@ -336,7 +344,7 @@ window.revokeAllSessions = async function() {
 };
 
 async function loadAuthManagement() {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     await Promise.all([
         loadPasskeys(),

@@ -229,7 +229,7 @@ function parseBookmarksHtml(htmlContent) {
 }
 
 async function handleImport(event) {
-    if (!isAdminUnlocked()) {
+    if (!requireAdminUiAction()) {
         event.target.value = '';
         return;
     }

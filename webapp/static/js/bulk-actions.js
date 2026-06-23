@@ -1,5 +1,5 @@
 window.toggleVisibleBookmarkSelection = function(checked) {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     for (const id of getCurrentPageSelectableBookmarkIds()) {
         if (checked) {
@@ -14,7 +14,7 @@ window.toggleVisibleBookmarkSelection = function(checked) {
 };
 
 window.moveSelectedBookmarks = async function() {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     const ids = getSelectedBookmarkIds();
 
@@ -40,7 +40,7 @@ window.closeBulkMoveDialog = function() {
 };
 
 window.confirmSelectedBookmarksMove = async function() {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     const ids = getSelectedBookmarkIds();
 
@@ -97,7 +97,7 @@ window.confirmSelectedBookmarksMove = async function() {
 };
 
 window.deleteSelectedBookmarks = async function() {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     const ids = getSelectedBookmarkIds();
 

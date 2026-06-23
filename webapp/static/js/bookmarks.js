@@ -468,6 +468,11 @@ function canSortContentRows() {
 
 function setupFolderTreeDrag(button) {
     button.addEventListener('dragstart', (event) => {
+        if (!requireAdminUiAction()) {
+            event.preventDefault();
+            return;
+        }
+
         if (event.target.closest('.folder-actions') || event.target.closest('[data-action="toggle"]')) {
             event.preventDefault();
             return;
@@ -484,6 +489,11 @@ function setupFolderTreeDrag(button) {
     });
 
     button.addEventListener('dragover', (event) => {
+        if (!requireAdminUiAction()) {
+            event.preventDefault();
+            return;
+        }
+
         const dragging = folderList.querySelector('.folder-item.dragging');
 
         if (!dragging || dragging === button || dragging.dataset.parentFolder !== button.dataset.parentFolder) {
@@ -500,6 +510,11 @@ function setupFolderTreeDrag(button) {
     });
 
     button.addEventListener('drop', async (event) => {
+        if (!requireAdminUiAction()) {
+            event.preventDefault();
+            return;
+        }
+
         const dragging = folderList.querySelector('.folder-item.dragging');
 
         if (!dragging || dragging === button || dragging.dataset.parentFolder !== button.dataset.parentFolder) {
@@ -516,6 +531,11 @@ function setupContentRowDrag(row) {
     row.classList.add('sortable');
 
     row.addEventListener('dragstart', (event) => {
+        if (!requireAdminUiAction()) {
+            event.preventDefault();
+            return;
+        }
+
         if (
             event.target.closest('.bookmark-actions') ||
             event.target.closest('.bookmark-select') ||
@@ -537,6 +557,11 @@ function setupContentRowDrag(row) {
     });
 
     row.addEventListener('dragover', (event) => {
+        if (!requireAdminUiAction()) {
+            event.preventDefault();
+            return;
+        }
+
         const dragging = wrapper.querySelector('.bookmark-row.dragging');
 
         if (!dragging || dragging === row || dragging.dataset.sortType !== row.dataset.sortType) {
@@ -553,6 +578,11 @@ function setupContentRowDrag(row) {
     });
 
     row.addEventListener('drop', async (event) => {
+        if (!requireAdminUiAction()) {
+            event.preventDefault();
+            return;
+        }
+
         const dragging = wrapper.querySelector('.bookmark-row.dragging');
 
         if (!dragging || dragging === row || dragging.dataset.sortType !== row.dataset.sortType) {
@@ -618,7 +648,7 @@ async function reorderContentRowsAfterDrop(dragging, target, event) {
 }
 
 async function saveFolderOrder(parentFolder, folders) {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     try {
         const res = await fetch(`${API_BASE}/folders/reorder`, {
@@ -653,7 +683,7 @@ async function saveFolderOrder(parentFolder, folders) {
 }
 
 async function saveBookmarkOrder(folder, ids) {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     try {
         const res = await fetch(`${API_BASE}/bookmarks/reorder`, {
@@ -972,7 +1002,7 @@ function renderCards() {
 }
 
 function handleDeleteFolder(folder) {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     pendingDeleteFolder = folder;
 
@@ -998,7 +1028,7 @@ function handleDeleteFolder(folder) {
 }
 
 function handleRenameFolder(folder) {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     pendingRenameFolder = folder;
 
@@ -1025,7 +1055,7 @@ window.closeFolderRenameDialog = function() {
 };
 
 window.confirmFolderRename = async function() {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     if (!pendingRenameFolder) return;
 
@@ -1044,7 +1074,7 @@ window.closeFolderDeleteDialog = function() {
 };
 
 window.confirmFolderDelete = async function() {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     if (!pendingDeleteFolder) return;
 
@@ -1070,7 +1100,7 @@ window.confirmFolderDelete = async function() {
 };
 
 async function moveFolderBookmarksUp(folder) {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     try {
         const res = await fetch(`${API_BASE}/folders/move-up`, {
@@ -1100,7 +1130,7 @@ async function moveFolderBookmarksUp(folder) {
 }
 
 async function renameFolder(folder, newFolder) {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     try {
         const res = await fetch(`${API_BASE}/folders/rename`, {
@@ -1133,7 +1163,7 @@ async function renameFolder(folder, newFolder) {
 }
 
 async function deleteFolderWithBookmarks(folder) {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     try {
         const res = await fetch(`${API_BASE}/folders/delete`, {

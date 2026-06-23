@@ -43,7 +43,7 @@ function getWebdavConfigPayload() {
 }
 
 window.openSettings = async function() {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     openOverlay(settingsOverlay);
     closeFloatingMenu();
@@ -64,7 +64,7 @@ window.closeSettings = function() {
 };
 
 window.saveWebdavConfig = async function() {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     try {
         const res = await fetch(`${API_BASE}/webdav/config`, {

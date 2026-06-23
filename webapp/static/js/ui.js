@@ -1,5 +1,5 @@
 window.openBox = function() {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     boxTitle.innerText = '创建新书签';
     document.getElementById('bookmark-id').value = '';
@@ -9,7 +9,7 @@ window.openBox = function() {
 };
 
 window.openImportFile = function() {
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     closeFloatingMenu();
     document.getElementById('file-import').click();
@@ -21,7 +21,7 @@ window.closeBox = function() {
 
 window.editItem = function(event, id) {
     event.stopPropagation();
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     const target = bookmarks.find((bookmark) => String(bookmark.id) === String(id));
     if (!target) return;
@@ -40,7 +40,7 @@ function fillBookmarkForm(bookmark) {
 
 window.removeItem = async function(event, id) {
     event.stopPropagation();
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     const shouldDelete = await showConfirm('确认删除这个书签吗？', {
         title: '删除书签',
@@ -71,7 +71,7 @@ window.removeItem = async function(event, id) {
 
 window.toggleFloatingMenu = function(event) {
     event.stopPropagation();
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     if (!floatingMenu) return;
 

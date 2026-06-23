@@ -141,7 +141,7 @@ document.addEventListener('keydown', (event) => {
 form.addEventListener('submit', async function(event) {
     event.preventDefault();
 
-    if (!isAdminUnlocked()) return;
+    if (!requireAdminUiAction()) return;
 
     const id = document.getElementById('bookmark-id').value || Date.now().toString();
     const title = document.getElementById('title').value.trim();
