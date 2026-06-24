@@ -82,16 +82,18 @@ pub struct AuthConfig {
 #[derive(Debug, Clone)]
 pub enum AuthGuardError {
     AdminSessionRequired,
+    AppSessionRequired,
     AuthConfigRequired(Vec<&'static str>),
     InvalidContentType,
     InvalidOrigin,
+    MixedAuthNotAllowed,
 }
 
 impl AuthGuardError {
     pub fn status(&self) -> u16 {
         match self {
-            Self::AdminSessionRequired => 401,
-            Self::InvalidContentType => 400,
+            Self::AdminSessionRequired | Self::AppSessionRequired => 401,
+            Self::InvalidContentType | Self::MixedAuthNotAllowed => 400,
             Self::AuthConfigRequired(_) | Self::InvalidOrigin => 403,
         }
     }
@@ -99,18 +101,22 @@ impl AuthGuardError {
     pub fn code(&self) -> &'static str {
         match self {
             Self::AdminSessionRequired => "admin_session_required",
+            Self::AppSessionRequired => "app_session_required",
             Self::AuthConfigRequired(_) => "auth_config_required",
             Self::InvalidContentType => "invalid_content_type",
             Self::InvalidOrigin => "invalid_origin",
+            Self::MixedAuthNotAllowed => "mixed_auth_not_allowed",
         }
     }
 
     pub fn message(&self) -> &'static str {
         match self {
             Self::AdminSessionRequired => "需要解锁管理模式",
+            Self::AppSessionRequired => "需要有效 App 设备会话",
             Self::AuthConfigRequired(_) => "认证配置不完整",
             Self::InvalidContentType => "请求类型无效",
             Self::InvalidOrigin => "请求来源无效",
+            Self::MixedAuthNotAllowed => "请求不能同时使用 Web 会话和 App Token",
         }
     }
 }
@@ -330,6 +336,26 @@ pub fn session_token_from_request(req: &Request) -> Result<Option<String>> {
     Ok(parse_cookie_value(&cookie_header, ADMIN_SESSION_COOKIE))
 }
 
+pub fn authorization_bearer_token_from_request(req: &Request) -> Result<Option<String>> {
+    let Some(authorization) = req.headers().get("Authorization")? else {
+        return Ok(None);
+    };
+    let mut pieces = authorization.trim().splitn(2, ' ');
+    let scheme = pieces.next().unwrap_or_default();
+    let token = pieces.next().unwrap_or_default().trim();
+
+    if scheme.eq_ignore_ascii_case("bearer") && !token.is_empty() {
+        return Ok(Some(token.to_string()));
+    }
+
+    Ok(None)
+}
+
+pub fn app_device_token_from_request(req: &Request) -> Result<Option<String>> {
+    Ok(authorization_bearer_token_from_request(req)?
+        .filter(|token| token.starts_with(APP_DEVICE_TOKEN_PREFIX)))
+}
+
 pub fn parse_cookie_value(header: &str, name: &str) -> Option<String> {
     for part in header.split(';') {
         let mut pieces = part.trim().splitn(2, '=');
@@ -428,6 +454,30 @@ pub async fn require_admin_session(
 
     Ok(AdminSession {
         last_seen_at: now,
+        ..session
+    })
+}
+
+pub async fn require_app_device_session(
+    db: &D1Database,
+    req: &Request,
+) -> std::result::Result<AppDeviceSession, AuthGuardError> {
+    let token = app_device_token_from_request(req)
+        .map_err(|_| AuthGuardError::AppSessionRequired)?
+        .ok_or(AuthGuardError::AppSessionRequired)?;
+    let token_hash = hash_session_token(&token);
+    let now = now_timestamp();
+    let session = get_valid_app_device_session_by_hash(db, &token_hash)
+        .await
+        .map_err(|_| AuthGuardError::AppSessionRequired)?
+        .ok_or(AuthGuardError::AppSessionRequired)?;
+
+    touch_app_device_session(db, &session.id, now)
+        .await
+        .map_err(|_| AuthGuardError::AppSessionRequired)?;
+
+    Ok(AppDeviceSession {
+        last_seen_at: Some(now),
         ..session
     })
 }

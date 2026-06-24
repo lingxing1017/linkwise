@@ -198,7 +198,7 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/bookmarks", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
-            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+            if let Err((status, body)) = require_management_json_request(&db, &req, &ctx.env).await? {
                 return json_with_status(&body, status);
             }
 
@@ -211,7 +211,7 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/bookmarks/bulk", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
-            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+            if let Err((status, body)) = require_management_json_request(&db, &req, &ctx.env).await? {
                 return json_with_status(&body, status);
             }
 
@@ -224,7 +224,7 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/bookmarks/move", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
-            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+            if let Err((status, body)) = require_management_json_request(&db, &req, &ctx.env).await? {
                 return json_with_status(&body, status);
             }
 
@@ -237,7 +237,7 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/bookmarks/reorder", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
-            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+            if let Err((status, body)) = require_management_json_request(&db, &req, &ctx.env).await? {
                 return json_with_status(&body, status);
             }
 
@@ -249,7 +249,7 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/bookmarks/delete", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
-            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+            if let Err((status, body)) = require_management_json_request(&db, &req, &ctx.env).await? {
                 return json_with_status(&body, status);
             }
 
@@ -262,7 +262,7 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .delete_async("/api/bookmarks/:id", |req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
-            if let Err((status, body)) = require_admin_state_change(&db, &req, &ctx.env).await? {
+            if let Err((status, body)) = require_management_state_change(&db, &req, &ctx.env).await? {
                 return json_with_status(&body, status);
             }
 
@@ -275,7 +275,7 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/folders/reorder", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
-            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+            if let Err((status, body)) = require_management_json_request(&db, &req, &ctx.env).await? {
                 return json_with_status(&body, status);
             }
 
@@ -287,7 +287,7 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/folders/move-up", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
-            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+            if let Err((status, body)) = require_management_json_request(&db, &req, &ctx.env).await? {
                 return json_with_status(&body, status);
             }
 
@@ -300,7 +300,7 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/folders/rename", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
-            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+            if let Err((status, body)) = require_management_json_request(&db, &req, &ctx.env).await? {
                 return json_with_status(&body, status);
             }
 
@@ -313,7 +313,7 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
         })
         .post_async("/api/folders/delete", |mut req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
-            if let Err((status, body)) = require_admin_json_request(&db, &req, &ctx.env).await? {
+            if let Err((status, body)) = require_management_json_request(&db, &req, &ctx.env).await? {
                 return json_with_status(&body, status);
             }
 
@@ -437,6 +437,53 @@ async fn require_admin_state_change(
     }
 
     require_admin_session_only(db, req).await
+}
+
+async fn require_management_json_request(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+) -> Result<Result<(), (u16, serde_json::Value)>> {
+    require_management_request(db, req, env, true).await
+}
+
+async fn require_management_state_change(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+) -> Result<Result<(), (u16, serde_json::Value)>> {
+    require_management_request(db, req, env, false).await
+}
+
+async fn require_management_request(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+    admin_requires_json: bool,
+) -> Result<Result<(), (u16, serde_json::Value)>> {
+    let has_admin_cookie = auth::session_token_from_request(req)?.is_some();
+    let has_app_token = auth::app_device_token_from_request(req)?.is_some();
+
+    if has_admin_cookie && has_app_token {
+        return Ok(Err(guard_error(auth::AuthGuardError::MixedAuthNotAllowed)));
+    }
+
+    if has_app_token {
+        if let Err(error) = auth::ensure_json_request(req) {
+            return Ok(Err(guard_error(error)));
+        }
+
+        return match auth::require_app_device_session(db, req).await {
+            Ok(_) => Ok(Ok(())),
+            Err(error) => Ok(Err(guard_error(error))),
+        };
+    }
+
+    if admin_requires_json {
+        require_admin_json_request(db, req, env).await
+    } else {
+        require_admin_state_change(db, req, env).await
+    }
 }
 
 async fn require_auth_json_state_change(

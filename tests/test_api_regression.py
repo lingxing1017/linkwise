@@ -29,6 +29,17 @@ def create_bookmark(api_client, **overrides):
     return response.json()
 
 
+def create_app_device_token(api_client, label="app-token"):
+    response = api_client.post("/api/auth/app-devices", {"name": unique_id(label)})
+    assert response.status == 200
+    return response.json()["token"]
+
+
+def bearer_client(api_client, token):
+    client = api_client.__class__(api_client.base_url)
+    return client, {"Authorization": f"Bearer {token}"}
+
+
 def bookmark_titles(api_client, marker):
     response = api_client.get("/api/bookmarks")
     assert response.status == 200
@@ -310,6 +321,99 @@ def test_app_device_revoke_all_marks_all_devices_revoked(api_client):
     devices = [item for item in listed["devices"] if item["id"] in device_ids]
     assert {item["id"] for item in devices} == device_ids
     assert all(item["revoked_at"] for item in devices)
+
+
+@requires_admin_session
+def test_app_bearer_can_write_bookmarks(api_client):
+    token = create_app_device_token(api_client, "bearer-bookmark")
+    app_client, headers = bearer_client(api_client, token)
+    marker = unique_id("bearer-create")
+    response = app_client.request(
+        "POST",
+        "/api/bookmarks",
+        bookmark_payload(id=marker, title=f"Bearer {marker}", url=f"{marker}.example.test"),
+        headers=headers,
+    )
+    result = response.json()
+
+    assert response.status == 200
+    assert result["status"] == "success"
+    assert result["id"] == marker
+    assert bookmark_titles(app_client, marker) == [f"Bearer {marker}"]
+
+
+@requires_admin_session
+def test_app_bearer_can_write_folders(api_client):
+    token = create_app_device_token(api_client, "bearer-folder")
+    app_client, headers = bearer_client(api_client, token)
+    marker = unique_id("bearer-folder")
+    create = app_client.request(
+        "POST",
+        "/api/bookmarks",
+        bookmark_payload(id=f"{marker}-a", folder=f"Inbox / {marker}", url=f"{marker}.example.test"),
+        headers=headers,
+    )
+    rename = app_client.request(
+        "POST",
+        "/api/folders/rename",
+        {"folder": f"Inbox / {marker}", "new_folder": f"Archive / {marker}"},
+        headers=headers,
+    )
+
+    assert create.status == 200
+    assert rename.status == 200
+    assert rename.json()["renamed_count"] == 1
+
+
+@requires_admin_session
+def test_revoked_app_bearer_cannot_write(api_client):
+    create = api_client.post("/api/auth/app-devices", {"name": unique_id("bearer-revoked")}).json()
+    token = create["token"]
+    api_client.request("DELETE", f"/api/auth/app-devices/{create['device']['id']}", {})
+    app_client, headers = bearer_client(api_client, token)
+    response = app_client.request("POST", "/api/bookmarks", bookmark_payload(), headers=headers)
+    result = response.json()
+
+    assert response.status == 401
+    assert result["status"] == "error"
+    assert result["error"] == "app_session_required"
+
+
+@requires_admin_session
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        ("GET", "/api/webdav/config", None),
+        ("POST", "/api/webdav/config", {"webdav_url": "https://dav.example.test"}),
+        ("GET", "/api/auth/app-devices", None),
+        ("POST", "/api/auth/app-devices", {"name": "Nested"}),
+    ],
+)
+def test_app_bearer_cannot_access_admin_only_apis(api_client, method, path, payload):
+    token = create_app_device_token(api_client, "bearer-boundary")
+    app_client, headers = bearer_client(api_client, token)
+    response = app_client.request(method, path, payload, headers=headers)
+    result = response.json()
+
+    assert response.status == 401
+    assert result["status"] == "error"
+    assert result["error"] == "admin_session_required"
+
+
+@requires_admin_session
+def test_mixed_cookie_and_app_bearer_is_rejected(api_client):
+    token = create_app_device_token(api_client, "bearer-mixed")
+    response = api_client.request(
+        "POST",
+        "/api/bookmarks",
+        bookmark_payload(),
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    result = response.json()
+
+    assert response.status == 400
+    assert result["status"] == "error"
+    assert result["error"] == "mixed_auth_not_allowed"
 
 
 @requires_admin_session
