@@ -15,3 +15,10 @@ secrets/
 # Build artifacts
 output/
 target/
+
+# Cloudflare local development
+.dev.vars
+.wrangler/
+
+# Node dependencies
+node_modules/
