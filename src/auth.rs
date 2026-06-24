@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::crypto;
-use crate::models::{AdminCredential, AdminSession, AuthChallenge, CountValue};
+use crate::models::{AdminCredential, AdminSession, AppDeviceSession, AuthChallenge, CountValue};
 use js_sys::wasm_bindgen::JsCast;
 use js_sys::{Reflect, Uint8Array};
 use worker::d1::{D1Database, D1Type};
@@ -19,6 +19,9 @@ pub const WEB_SESSION_MAX_AGE_SECONDS: i64 = 24 * 60 * 60;
 pub const AUTH_RATE_LIMIT_MAX_FAILURES: i64 = 5;
 pub const AUTH_RATE_LIMIT_WINDOW_SECONDS: i64 = 5 * 60;
 pub const AUTH_RATE_LIMIT_LOCK_SECONDS: i64 = 5 * 60;
+pub const APP_DEVICE_TOKEN_PREFIX: &str = "lwapp_";
+pub const APP_DEVICE_TOKEN_RANDOM_BYTES: u32 = 32;
+pub const APP_DEVICE_TOKEN_PREFIX_CHARS: usize = APP_DEVICE_TOKEN_PREFIX.len() + 8;
 
 #[derive(Debug, Clone)]
 pub struct NewAdminCredential {
@@ -46,6 +49,16 @@ pub struct NewAdminSession {
     pub created_at: i64,
     pub last_seen_at: i64,
     pub expires_at: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewAppDeviceSession {
+    pub id: String,
+    pub token_hash: String,
+    pub token_prefix: String,
+    pub name: String,
+    pub issued_by_credential_id: Option<String>,
+    pub created_at: i64,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -108,6 +121,17 @@ pub fn now_timestamp() -> i64 {
 
 pub fn hash_session_token(token: &str) -> String {
     crypto::sha256_hex(token)
+}
+
+pub fn app_device_token_prefix(token: &str) -> String {
+    token.chars().take(APP_DEVICE_TOKEN_PREFIX_CHARS).collect()
+}
+
+pub fn build_app_device_token() -> Result<String> {
+    Ok(format!(
+        "{APP_DEVICE_TOKEN_PREFIX}{}",
+        random_base64url(APP_DEVICE_TOKEN_RANDOM_BYTES)?
+    ))
 }
 
 pub fn session_expires_at(now: i64, requested_max_age: Option<i64>) -> i64 {
@@ -867,6 +891,133 @@ pub async fn revoke_sessions_for_credential(
     Ok(())
 }
 
+pub async fn insert_app_device_session(
+    db: &D1Database,
+    session: &NewAppDeviceSession,
+) -> Result<()> {
+    let issued_by_credential_id = session.issued_by_credential_id.as_deref();
+    let args = [
+        D1Type::Text(&session.id),
+        D1Type::Text(&session.token_hash),
+        D1Type::Text(&session.token_prefix),
+        D1Type::Text(&session.name),
+        D1Type::Text(issued_by_credential_id.unwrap_or("")),
+        D1Type::Integer(session.created_at as i32),
+    ];
+    db.prepare(
+        r#"
+        INSERT INTO app_device_sessions
+            (id, token_hash, token_prefix, name, issued_by_credential_id, created_at)
+        VALUES (?, ?, ?, ?, NULLIF(?, ''), ?)
+        "#,
+    )
+    .bind_refs(&args)?
+    .run()
+    .await?;
+
+    Ok(())
+}
+
+pub async fn get_valid_app_device_session_by_hash(
+    db: &D1Database,
+    token_hash: &str,
+) -> Result<Option<AppDeviceSession>> {
+    let args = [D1Type::Text(token_hash)];
+    db.prepare(
+        r#"
+        SELECT
+            id, token_hash, token_prefix, name, issued_by_credential_id,
+            created_at, last_seen_at, revoked_at
+        FROM app_device_sessions
+        WHERE token_hash = ? AND revoked_at IS NULL
+        "#,
+    )
+    .bind_refs(&args)?
+    .first::<AppDeviceSession>(None)
+    .await
+}
+
+pub async fn list_app_device_sessions(db: &D1Database) -> Result<Vec<AppDeviceSession>> {
+    db.prepare(
+        r#"
+        SELECT
+            id, token_hash, token_prefix, name, issued_by_credential_id,
+            created_at, last_seen_at, revoked_at
+        FROM app_device_sessions
+        ORDER BY created_at DESC
+        "#,
+    )
+    .all()
+    .await?
+    .results()
+}
+
+pub async fn touch_app_device_session(
+    db: &D1Database,
+    session_id: &str,
+    last_seen_at: i64,
+) -> Result<()> {
+    let args = [
+        D1Type::Integer(last_seen_at as i32),
+        D1Type::Text(session_id),
+    ];
+    db.prepare("UPDATE app_device_sessions SET last_seen_at = ? WHERE id = ?")
+        .bind_refs(&args)?
+        .run()
+        .await?;
+
+    Ok(())
+}
+
+pub async fn revoke_app_device_session(
+    db: &D1Database,
+    session_id: &str,
+    revoked_at: i64,
+) -> Result<()> {
+    let args = [D1Type::Integer(revoked_at as i32), D1Type::Text(session_id)];
+    db.prepare(
+        "UPDATE app_device_sessions SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL",
+    )
+    .bind_refs(&args)?
+    .run()
+    .await?;
+
+    Ok(())
+}
+
+pub async fn revoke_all_app_device_sessions(db: &D1Database, revoked_at: i64) -> Result<()> {
+    let args = [D1Type::Integer(revoked_at as i32)];
+    db.prepare("UPDATE app_device_sessions SET revoked_at = ? WHERE revoked_at IS NULL")
+        .bind_refs(&args)?
+        .run()
+        .await?;
+
+    Ok(())
+}
+
+pub async fn revoke_app_device_sessions_for_credential(
+    db: &D1Database,
+    credential_id: &str,
+    revoked_at: i64,
+) -> Result<()> {
+    let args = [
+        D1Type::Integer(revoked_at as i32),
+        D1Type::Text(credential_id),
+    ];
+    db.prepare(
+        r#"
+        UPDATE app_device_sessions
+        SET revoked_at = ?
+        WHERE issued_by_credential_id = ? AND revoked_at IS NULL
+        "#,
+    )
+    .bind_refs(&args)?
+    .run()
+    .await?;
+
+    Ok(())
+}
+
 pub async fn get_auth_rate_limit(db: &D1Database, bucket: &str) -> Result<Option<AuthRateLimit>> {
     let args = [D1Type::Text(bucket)];
     db.prepare(
@@ -983,6 +1134,14 @@ mod tests {
                 PasskeyRegistrationFinalizeOperation::InsertCredential,
                 PasskeyRegistrationFinalizeOperation::MarkChallengeUsed,
             ]
+        );
+    }
+
+    #[test]
+    fn app_device_token_prefix_keeps_public_hint_short() {
+        assert_eq!(
+            app_device_token_prefix("lwapp_abcdefghijklmnopqrstuvwxyz"),
+            "lwapp_abcdefgh"
         );
     }
 }

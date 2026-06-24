@@ -88,6 +88,19 @@ pub struct AdminSession {
     pub revoked_at: Option<i64>,
 }
 
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AppDeviceSession {
+    pub id: String,
+    pub token_hash: String,
+    pub token_prefix: String,
+    pub name: String,
+    pub issued_by_credential_id: Option<String>,
+    pub created_at: i64,
+    pub last_seen_at: Option<i64>,
+    pub revoked_at: Option<i64>,
+}
+
 #[derive(Serialize)]
 pub struct BookmarkSaveResponse {
     pub status: &'static str,

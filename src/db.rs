@@ -168,6 +168,41 @@ pub async fn initialize_schema(db: &D1Database) -> Result<()> {
 
     db.prepare(
         r#"
+        CREATE TABLE IF NOT EXISTS app_device_sessions (
+            id TEXT PRIMARY KEY,
+            token_hash TEXT NOT NULL UNIQUE,
+            token_prefix TEXT NOT NULL,
+            name TEXT NOT NULL DEFAULT '',
+            issued_by_credential_id TEXT,
+            created_at INTEGER NOT NULL,
+            last_seen_at INTEGER,
+            revoked_at INTEGER
+        )
+        "#,
+    )
+    .run()
+    .await?;
+
+    db.prepare(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_app_device_sessions_issued_by_credential_id
+        ON app_device_sessions (issued_by_credential_id)
+        "#,
+    )
+    .run()
+    .await?;
+
+    db.prepare(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_app_device_sessions_revoked
+        ON app_device_sessions (revoked_at)
+        "#,
+    )
+    .run()
+    .await?;
+
+    db.prepare(
+        r#"
         CREATE TABLE IF NOT EXISTS auth_rate_limits (
             bucket TEXT PRIMARY KEY,
             failed_count INTEGER NOT NULL DEFAULT 0,
