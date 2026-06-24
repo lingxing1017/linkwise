@@ -649,6 +649,29 @@ body.readonly-mode .brand-settings-btn {
     padding: 12px;
 }
 
+.auth-token-once {
+    display: grid;
+    gap: 10px;
+}
+
+.auth-token-note {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.auth-token-once code {
+    display: block;
+    max-width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    padding: 10px;
+}
+
 .auth-pill {
     display: inline-flex;
     align-items: center;

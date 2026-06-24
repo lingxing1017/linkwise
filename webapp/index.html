@@ -319,6 +319,8 @@
                     <div class="auth-management-actions">
                         <button type="button" class="btn-save" onclick="addPasskey()">新增 Passkey</button>
                         <button type="button" class="btn-close" onclick="revokeAllSessions()">撤销全部会话</button>
+                        <button type="button" class="btn-save" onclick="createAppDevice()">新增 App 设备</button>
+                        <button type="button" class="btn-close" onclick="revokeAllAppDevices()">撤销全部 App 设备</button>
                     </div>
 
                     <div class="auth-list-block">
@@ -329,6 +331,11 @@
                     <div class="auth-list-block">
                         <div class="auth-list-title">设备 / Session</div>
                         <div class="auth-list" id="auth-session-list"></div>
+                    </div>
+
+                    <div class="auth-list-block">
+                        <div class="auth-list-title">App 设备</div>
+                        <div class="auth-list" id="auth-app-device-list"></div>
                     </div>
                 </div>
             </div>

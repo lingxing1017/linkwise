@@ -611,6 +611,74 @@ def test_unlocked_auth_icon_tooltip_has_only_time(page, live_server):
     assert "linkwise-unlocked-" in page.locator("#brand-auth-icon").get_attribute("src")
 
 
+def test_auth_management_lists_app_devices_without_tokens(page, live_server):
+    def handle(route):
+        url = route.request.url
+        if url.endswith("/api/auth/status"):
+            route.fulfill(
+                json={
+                    "public_read": True,
+                    "admin_initialized": True,
+                    "admin_unlocked": True,
+                    "admin_session_expires_at": int(time.time()) + 3600,
+                    "auth_configured": True,
+                    "missing_config": [],
+                }
+            )
+            return
+        if url.endswith("/api/webdav/config"):
+            route.fulfill(
+                json={
+                    "status": "success",
+                    "config": {
+                        "webdav_url": "",
+                        "username": "",
+                        "remote_dir": "",
+                        "filename": "linkwise-bookmarks.html",
+                        "has_password": False,
+                        "password_security": "none",
+                    },
+                }
+            )
+            return
+        if url.endswith("/api/auth/passkeys"):
+            route.fulfill(json={"ok": True, "passkeys": []})
+            return
+        if url.endswith("/api/auth/sessions"):
+            route.fulfill(json={"ok": True, "sessions": []})
+            return
+        if url.endswith("/api/auth/app-devices"):
+            route.fulfill(
+                json={
+                    "ok": True,
+                    "devices": [
+                        {
+                            "id": "device-1",
+                            "name": "iPhone",
+                            "token_prefix": "lwapp_abcd1234",
+                            "issued_by_credential_name": "Touch ID",
+                            "created_at": 1781999999,
+                            "last_seen_at": None,
+                            "revoked_at": None,
+                        }
+                    ],
+                }
+            )
+            return
+        route.continue_()
+
+    page.route("**/api/**", handle)
+    page.goto(live_server)
+    page.locator("#cards-wrapper").wait_for()
+    page.evaluate("openSettings()")
+    page.locator("#settings-tab-auth").click()
+
+    assert page.locator("#auth-app-device-list").is_visible()
+    assert page.locator("#auth-app-device-list").inner_text().find("iPhone") >= 0
+    assert page.locator("#auth-app-device-list").inner_text().find("lwapp_abcd1234") >= 0
+    assert "lwapp_supersecret" not in page.locator("#auth-app-device-list").inner_text()
+
+
 def test_expiring_auth_icon_shows_countdown_ring(page, live_server):
     page.goto(live_server)
     page.locator("#cards-wrapper").wait_for()

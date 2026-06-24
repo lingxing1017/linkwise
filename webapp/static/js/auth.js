@@ -404,12 +404,100 @@ window.revokeAllSessions = async function() {
     closeSettings();
 };
 
+window.createAppDevice = async function() {
+    if (!requireAdminUiAction()) return;
+
+    const name = window.prompt('为新的 App 设备命名', '我的 App 设备') || '我的 App 设备';
+    const res = await fetch(`${API_BASE}/auth/app-devices`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name })
+    });
+    const result = await parseApiJson(res, '创建 App 设备失败');
+
+    if (!res.ok || !result.ok) {
+        await showMessage(result.message || '创建 App 设备失败', 'App 设备');
+        return;
+    }
+
+    const content = document.createElement('div');
+    content.className = 'auth-token-once';
+    content.innerHTML = `
+        <div class="auth-token-note">此 Token 只显示一次。</div>
+        <code>${escapeHtml(result.token || '')}</code>
+    `;
+    await openAppDialog({
+        title: 'App Token',
+        content,
+        confirmText: '我已保存'
+    });
+    await loadAppDevices();
+};
+
+window.revokeAppDevice = async function(deviceId) {
+    if (!requireAdminUiAction()) return;
+
+    const confirmed = await showConfirm('撤销这个 App 设备吗？', {
+        title: '撤销 App 设备',
+        confirmText: '撤销'
+    });
+
+    if (!confirmed) return;
+
+    const res = await fetch(`${API_BASE}/auth/app-devices/${encodeURIComponent(deviceId)}`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
+    });
+    const result = await parseApiJson(res, '撤销 App 设备失败');
+
+    if (!res.ok || !result.ok) {
+        await showMessage(result.message || '撤销 App 设备失败', 'App 设备');
+        return;
+    }
+
+    await loadAppDevices();
+};
+
+window.revokeAllAppDevices = async function() {
+    if (!requireAdminUiAction()) return;
+
+    const confirmed = await showConfirm('撤销所有 App 设备吗？', {
+        title: '撤销全部 App 设备',
+        confirmText: '全部撤销',
+        danger: true
+    });
+
+    if (!confirmed) return;
+
+    const res = await fetch(`${API_BASE}/auth/app-devices/revoke-all`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
+    });
+    const result = await parseApiJson(res, '撤销全部 App 设备失败');
+
+    if (!res.ok || !result.ok) {
+        await showMessage(result.message || '撤销全部 App 设备失败', 'App 设备');
+        return;
+    }
+
+    await loadAppDevices();
+};
+
 async function loadAuthManagement() {
     if (!requireAdminUiAction()) return;
 
     await Promise.all([
         loadPasskeys(),
-        loadSessions()
+        loadSessions(),
+        loadAppDevices()
     ]);
 }
 
@@ -468,6 +556,39 @@ async function loadSessions() {
             `;
         }).join('')
         : '<div class="auth-empty">暂无会话</div>';
+}
+
+async function loadAppDevices() {
+    if (!authAppDeviceList) return;
+
+    const res = await fetch(`${API_BASE}/auth/app-devices`);
+    const result = await parseApiJson(res, '获取 App 设备失败');
+
+    if (!res.ok || !result.ok) {
+        authAppDeviceList.innerHTML = `<div class="auth-empty">${escapeHtml(result.message || '获取失败')}</div>`;
+        return;
+    }
+
+    const devices = Array.isArray(result.devices) ? result.devices : [];
+    authAppDeviceList.innerHTML = devices.length
+        ? devices.map((device) => {
+            const revoked = Boolean(device.revoked_at);
+            const issuer = device.issued_by_credential_name || '未知 Passkey';
+            const lastSeen = device.last_seen_at ? `最近使用 ${formatAuthTime(device.last_seen_at)} · ` : '';
+            return `
+                <div class="auth-list-item ${revoked ? 'muted' : ''}">
+                    <div>
+                        <div class="auth-list-name">
+                            ${escapeHtml(device.name || 'App 设备')}
+                            ${revoked ? '<span class="auth-pill muted">已撤销</span>' : ''}
+                        </div>
+                        <div class="auth-list-meta">${escapeHtml(device.token_prefix || '')} · ${lastSeen}创建于 ${formatAuthTime(device.created_at)} · 签发 ${escapeHtml(issuer)}</div>
+                    </div>
+                    ${revoked ? '' : `<button type="button" class="row-btn icon-btn danger" onclick="revokeAppDevice('${escapeHtml(device.id)}')">×</button>`}
+                </div>
+            `;
+        }).join('')
+        : '<div class="auth-empty">暂无 App 设备</div>';
 }
 
 function decodeCredentialCreationOptions(publicKey) {
