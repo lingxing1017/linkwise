@@ -154,6 +154,40 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
                 Err(error) => Err(error),
             }
         })
+        .get_async("/api/auth/app-devices", |req, ctx| async move {
+            let db = initialized_db(&ctx.env).await?;
+            match app_device_list(&db, &req).await {
+                Ok(Ok(response)) => Response::from_json(&response),
+                Ok(Err((status, body))) => json_with_status(&body, status),
+                Err(error) => Err(error),
+            }
+        })
+        .post_async("/api/auth/app-devices", |mut req, ctx| async move {
+            let db = initialized_db(&ctx.env).await?;
+            let payload = req.json::<AppDeviceCreatePayload>().await.unwrap_or_default();
+            match app_device_create(&db, &req, &ctx.env, payload).await {
+                Ok(Ok(response)) => Response::from_json(&response),
+                Ok(Err((status, body))) => json_with_status(&body, status),
+                Err(error) => Err(error),
+            }
+        })
+        .delete_async("/api/auth/app-devices/:device_id", |req, ctx| async move {
+            let db = initialized_db(&ctx.env).await?;
+            let device_id = ctx.param("device_id").map(String::as_str).unwrap_or("");
+            match app_device_revoke(&db, &req, &ctx.env, device_id).await {
+                Ok(Ok(response)) => Response::from_json(&response),
+                Ok(Err((status, body))) => json_with_status(&body, status),
+                Err(error) => Err(error),
+            }
+        })
+        .post_async("/api/auth/app-devices/revoke-all", |req, ctx| async move {
+            let db = initialized_db(&ctx.env).await?;
+            match app_device_revoke_all(&db, &req, &ctx.env).await {
+                Ok(Ok(response)) => Response::from_json(&response),
+                Ok(Err((status, body))) => json_with_status(&body, status),
+                Err(error) => Err(error),
+            }
+        })
         .get_async("/api/bookmarks", |_req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
             Response::from_json(&db::all_bookmarks(&db).await?)
@@ -951,6 +985,166 @@ async fn session_revoke_all(
     )))
 }
 
+async fn app_device_list(
+    db: &D1Database,
+    req: &Request,
+) -> Result<Result<serde_json::Value, (u16, serde_json::Value)>> {
+    if let Err(error) = auth::require_admin_session(db, req).await {
+        return Ok(Err(guard_error(error)));
+    }
+
+    let credential_names = admin_credential_names(db).await?;
+    let devices = auth::list_app_device_sessions(db)
+        .await?
+        .into_iter()
+        .map(|device| app_device_json(device, &credential_names))
+        .collect::<Vec<_>>();
+
+    Ok(Ok(json!({
+        "ok": true,
+        "devices": devices
+    })))
+}
+
+async fn app_device_create(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+    payload: AppDeviceCreatePayload,
+) -> Result<Result<serde_json::Value, (u16, serde_json::Value)>> {
+    if let Err(error) = require_auth_json_state_change(req, env).await? {
+        return Ok(Err(error));
+    }
+
+    let current_session = match auth::require_admin_session(db, req).await {
+        Ok(session) => session,
+        Err(error) => return Ok(Err(guard_error(error))),
+    };
+    let now = auth::now_timestamp();
+    let token = auth::build_app_device_token()?;
+    let token_hash = auth::hash_session_token(&token);
+    let name = payload
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("App Device")
+        .to_string();
+    let device = auth::NewAppDeviceSession {
+        id: auth::random_base64url(18)?,
+        token_hash,
+        token_prefix: auth::app_device_token_prefix(&token),
+        name,
+        issued_by_credential_id: current_session.credential_id,
+        created_at: now,
+    };
+
+    auth::insert_app_device_session(db, &device).await?;
+
+    let credential_names = admin_credential_names(db).await?;
+    let issued_by_credential_name = device
+        .issued_by_credential_id
+        .as_ref()
+        .and_then(|credential_id| credential_names.get(credential_id))
+        .cloned();
+
+    Ok(Ok(json!({
+        "ok": true,
+        "device": {
+            "id": device.id,
+            "name": device.name,
+            "token_prefix": device.token_prefix,
+            "issued_by_credential_id": device.issued_by_credential_id,
+            "issued_by_credential_name": issued_by_credential_name,
+            "created_at": device.created_at,
+            "last_seen_at": null,
+            "revoked_at": null
+        },
+        "token": token
+    })))
+}
+
+async fn app_device_revoke(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+    device_id: &str,
+) -> Result<Result<serde_json::Value, (u16, serde_json::Value)>> {
+    if let Err(error) = require_auth_json_state_change(req, env).await? {
+        return Ok(Err(error));
+    }
+
+    if let Err(error) = auth::require_admin_session(db, req).await {
+        return Ok(Err(guard_error(error)));
+    }
+
+    if device_id.is_empty() {
+        return Ok(Err((
+            400,
+            auth_error(400, "invalid_request", "App 设备 ID 无效"),
+        )));
+    }
+
+    auth::revoke_app_device_session(db, device_id, auth::now_timestamp()).await?;
+
+    Ok(Ok(json!({
+        "ok": true,
+        "revoked_device_id": device_id
+    })))
+}
+
+async fn app_device_revoke_all(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+) -> Result<Result<serde_json::Value, (u16, serde_json::Value)>> {
+    if let Err(error) = require_auth_json_state_change(req, env).await? {
+        return Ok(Err(error));
+    }
+
+    if let Err(error) = auth::require_admin_session(db, req).await {
+        return Ok(Err(guard_error(error)));
+    }
+
+    auth::revoke_all_app_device_sessions(db, auth::now_timestamp()).await?;
+
+    Ok(Ok(json!({
+        "ok": true
+    })))
+}
+
+async fn admin_credential_names(
+    db: &D1Database,
+) -> Result<std::collections::HashMap<String, String>> {
+    Ok(auth::list_admin_credentials(db)
+        .await?
+        .into_iter()
+        .map(|credential| (credential.credential_id, credential.name))
+        .collect())
+}
+
+fn app_device_json(
+    device: crate::models::AppDeviceSession,
+    credential_names: &std::collections::HashMap<String, String>,
+) -> serde_json::Value {
+    let issued_by_credential_name = device
+        .issued_by_credential_id
+        .as_ref()
+        .and_then(|credential_id| credential_names.get(credential_id))
+        .cloned();
+
+    json!({
+        "id": device.id,
+        "name": device.name,
+        "token_prefix": device.token_prefix,
+        "issued_by_credential_id": device.issued_by_credential_id,
+        "issued_by_credential_name": issued_by_credential_name,
+        "created_at": device.created_at,
+        "last_seen_at": device.last_seen_at,
+        "revoked_at": device.revoked_at
+    })
+}
+
 async fn create_admin_session_cookie(
     db: &D1Database,
     config: &auth::AuthConfig,
@@ -1018,4 +1212,9 @@ struct PasskeyRegisterVerifyPayload {
 struct PasskeyLoginVerifyPayload {
     session_max_age_seconds: Option<i64>,
     credential: webauthn::PublicKeyCredentialPayload,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct AppDeviceCreatePayload {
+    name: Option<String>,
 }

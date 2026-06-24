@@ -119,6 +119,9 @@ def test_setup_token_failures_are_rate_limited(api_client):
         ("DELETE", "/api/auth/passkeys/missing"),
         ("DELETE", "/api/auth/sessions/missing"),
         ("POST", "/api/auth/sessions/revoke-all"),
+        ("POST", "/api/auth/app-devices"),
+        ("DELETE", "/api/auth/app-devices/missing"),
+        ("POST", "/api/auth/app-devices/revoke-all"),
     ],
 )
 def test_auth_mutations_require_json_content_type(api_client, method, path):
@@ -142,6 +145,9 @@ def test_auth_mutations_require_json_content_type(api_client, method, path):
         ("DELETE", "/api/auth/passkeys/missing", {}),
         ("DELETE", "/api/auth/sessions/missing", {}),
         ("POST", "/api/auth/sessions/revoke-all", {}),
+        ("POST", "/api/auth/app-devices", {}),
+        ("DELETE", "/api/auth/app-devices/missing", {}),
+        ("POST", "/api/auth/app-devices/revoke-all", {}),
     ],
 )
 def test_auth_mutations_reject_cross_origin(api_client, method, path, payload):
@@ -229,6 +235,81 @@ def test_management_apis_require_admin_session(api_client, method, path, payload
     assert response.status == 401
     assert result["status"] == "error"
     assert result["error"] == "admin_session_required"
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        ("GET", "/api/auth/app-devices", None),
+        ("POST", "/api/auth/app-devices", {"name": "Phone"}),
+        ("DELETE", "/api/auth/app-devices/missing", {}),
+        ("POST", "/api/auth/app-devices/revoke-all", {}),
+    ],
+)
+def test_app_device_management_requires_admin_session(api_client, method, path, payload):
+    response = api_client.request(method, path, payload)
+    result = response.json()
+
+    assert response.status == 401
+    assert result["status"] == "error"
+    assert result["error"] == "admin_session_required"
+
+
+@requires_admin_session
+def test_app_device_token_is_returned_only_on_create(api_client):
+    marker = unique_id("app-device")
+    create = api_client.post("/api/auth/app-devices", {"name": f"Phone {marker}"})
+    created = create.json()
+
+    assert create.status == 200
+    assert created["ok"] is True
+    assert created["token"].startswith("lwapp_")
+    assert created["device"]["name"] == f"Phone {marker}"
+    assert created["device"]["token_prefix"] == created["token"][:14]
+
+    listed = api_client.get("/api/auth/app-devices")
+    result = listed.json()
+    device = next(item for item in result["devices"] if item["id"] == created["device"]["id"])
+
+    assert listed.status == 200
+    assert result["ok"] is True
+    assert "token" not in device
+    assert device["token_prefix"] == created["device"]["token_prefix"]
+
+
+@requires_admin_session
+def test_app_device_revoke_marks_device_revoked(api_client):
+    create = api_client.post("/api/auth/app-devices", {"name": unique_id("revoke-device")})
+    device_id = create.json()["device"]["id"]
+
+    revoke = api_client.request("DELETE", f"/api/auth/app-devices/{device_id}", {})
+    result = revoke.json()
+
+    assert revoke.status == 200
+    assert result["ok"] is True
+    assert result["revoked_device_id"] == device_id
+
+    listed = api_client.get("/api/auth/app-devices").json()
+    device = next(item for item in listed["devices"] if item["id"] == device_id)
+    assert device["revoked_at"]
+
+
+@requires_admin_session
+def test_app_device_revoke_all_marks_all_devices_revoked(api_client):
+    first = api_client.post("/api/auth/app-devices", {"name": unique_id("revoke-all-a")}).json()
+    second = api_client.post("/api/auth/app-devices", {"name": unique_id("revoke-all-b")}).json()
+    device_ids = {first["device"]["id"], second["device"]["id"]}
+
+    revoke = api_client.post("/api/auth/app-devices/revoke-all", {})
+    result = revoke.json()
+
+    assert revoke.status == 200
+    assert result["ok"] is True
+
+    listed = api_client.get("/api/auth/app-devices").json()
+    devices = [item for item in listed["devices"] if item["id"] in device_ids]
+    assert {item["id"] for item in devices} == device_ids
+    assert all(item["revoked_at"] for item in devices)
 
 
 @requires_admin_session
