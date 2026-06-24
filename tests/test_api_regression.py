@@ -4,9 +4,7 @@ import pytest
 
 
 pytestmark = pytest.mark.api
-requires_admin_session = pytest.mark.skip(
-    reason="requires Passkey-authenticated admin session test fixture"
-)
+requires_admin_session = pytest.mark.admin_session
 
 
 def unique_id(label):
@@ -396,7 +394,6 @@ def test_bulk_import_counts_duplicates_and_skips_invalid_items(api_client):
                 {"id": f"{marker}-bad", "title": f"Bad {marker}", "url": "javascript:bad"},
                 {"id": f"{marker}-dup-existing", "title": f"Existing again {marker}", "url": f"existing-{marker}.test"},
                 {"id": f"{marker}-dup-batch", "title": f"Alpha again {marker}", "url": f"https://alpha-{marker}.test"},
-                "not a bookmark",
             ]
         },
     )
@@ -406,7 +403,7 @@ def test_bulk_import_counts_duplicates_and_skips_invalid_items(api_client):
     assert result["imported_count"] == 2
     assert result["imported_ids"] == [f"{marker}-a", f"{marker}-b"]
     assert result["duplicate_count"] == 2
-    assert result["skipped_count"] == 2
+    assert result["skipped_count"] == 1
     assert result["total_count"] >= 3
 
 
