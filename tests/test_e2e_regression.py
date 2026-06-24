@@ -6,20 +6,21 @@ import pytest
 
 
 pytestmark = pytest.mark.e2e
-requires_admin_session = pytest.mark.skip(
-    reason="requires Passkey-authenticated admin session test fixture"
-)
 
 
 def unique_id(label):
     return f"e2e-{label}-{time.time_ns()}"
 
 
-def seed_bookmark(base_url, payload):
+def seed_bookmark(base_url, payload, session_cookie=None):
+    headers = {"Content-Type": "application/json"}
+    if session_cookie:
+        headers["Cookie"] = f"linkwise_admin_session={session_cookie}"
+
     request = urllib.request.Request(
         f"{base_url}/api/bookmarks",
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=10) as response:
@@ -39,13 +40,13 @@ def open_add_bookmark(page):
     page.get_by_title("添加书签").click()
 
 
-@requires_admin_session
-def test_create_and_search_bookmark(page, live_server):
+def test_create_and_search_bookmark(admin_page, authenticated_live_server):
     marker = unique_id("create")
     title = f"Worker Docs {marker}"
     url = f"https://{marker}.example.test"
 
-    page.goto(live_server)
+    page = admin_page
+    page.goto(authenticated_live_server)
     page.locator("#cards-wrapper").wait_for()
 
     open_add_bookmark(page)
@@ -59,18 +60,23 @@ def test_create_and_search_bookmark(page, live_server):
     assert bookmark_row(page, title).count() == 1
 
 
-@requires_admin_session
-def test_duplicate_url_can_open_original_for_edit(page, live_server):
+def test_duplicate_url_can_open_original_for_edit(
+    admin_page,
+    authenticated_live_server,
+    admin_session_cookie,
+):
     marker = unique_id("duplicate")
     title = f"Original Site {marker}"
     url = f"https://{marker}.example.test"
 
     seed_bookmark(
-        live_server,
+        authenticated_live_server,
         {"id": marker, "title": title, "url": url, "folder": "E2E"},
+        admin_session_cookie,
     )
 
-    page.goto(live_server)
+    page = admin_page
+    page.goto(authenticated_live_server)
     page.locator("#search").fill(marker)
     bookmark_row(page, title).wait_for()
 
@@ -87,16 +93,38 @@ def test_duplicate_url_can_open_original_for_edit(page, live_server):
     assert page.locator("#title").input_value() == title
 
 
-@requires_admin_session
-def test_bulk_move_and_delete_selected_bookmarks(page, live_server):
+def test_bulk_move_and_delete_selected_bookmarks(
+    admin_page,
+    authenticated_live_server,
+    admin_session_cookie,
+):
     marker = unique_id("bulk")
     alpha = f"Alpha {marker}"
     beta = f"Beta {marker}"
 
-    seed_bookmark(live_server, {"id": f"{marker}-a", "title": alpha, "url": f"https://a-{marker}.test", "folder": f"Inbox / {marker}"})
-    seed_bookmark(live_server, {"id": f"{marker}-b", "title": beta, "url": f"https://b-{marker}.test", "folder": f"Inbox / {marker}"})
+    seed_bookmark(
+        authenticated_live_server,
+        {
+            "id": f"{marker}-a",
+            "title": alpha,
+            "url": f"https://a-{marker}.test",
+            "folder": f"Inbox / {marker}",
+        },
+        admin_session_cookie,
+    )
+    seed_bookmark(
+        authenticated_live_server,
+        {
+            "id": f"{marker}-b",
+            "title": beta,
+            "url": f"https://b-{marker}.test",
+            "folder": f"Inbox / {marker}",
+        },
+        admin_session_cookie,
+    )
 
-    page.goto(live_server)
+    page = admin_page
+    page.goto(authenticated_live_server)
     page.locator("#search").fill(marker)
     bookmark_row(page, alpha).wait_for()
     bookmark_row(page, alpha).locator(".bookmark-select input").check()
@@ -120,8 +148,11 @@ def test_bulk_move_and_delete_selected_bookmarks(page, live_server):
     assert bookmark_row(page, beta).count() == 1
 
 
-@requires_admin_session
-def test_import_bookmarks_html_shows_last_import_view(page, live_server, tmp_path):
+def test_import_bookmarks_html_shows_last_import_view(
+    admin_page,
+    authenticated_live_server,
+    tmp_path,
+):
     marker = unique_id("import")
     import_file = tmp_path / "bookmarks.html"
     import_file.write_text(
@@ -142,7 +173,8 @@ def test_import_bookmarks_html_shows_last_import_view(page, live_server, tmp_pat
         encoding="utf-8",
     )
 
-    page.goto(live_server)
+    page = admin_page
+    page.goto(authenticated_live_server)
     page.locator("#cards-wrapper").wait_for()
 
     with page.expect_file_chooser() as chooser_info:
@@ -387,6 +419,50 @@ def test_unlock_can_send_session_duration(page, live_server):
     page.wait_for_function("() => !document.body.classList.contains('readonly-mode')")
 
     assert captured["body"]["session_max_age_seconds"] == 86400
+
+
+def test_real_passkey_registration_and_login_flow(
+    authenticated_page,
+    passkey_flow_live_server,
+    auth_setup_token,
+):
+    prompts = iter([auth_setup_token, "E2E Passkey"])
+    authenticated_page.on("dialog", lambda dialog: dialog.accept(next(prompts)))
+
+    authenticated_page.goto(passkey_flow_live_server)
+    authenticated_page.locator("#cards-wrapper").wait_for()
+    authenticated_page.locator("#brand-auth-btn").click()
+    authenticated_page.locator("#auth-session-duration").select_option("3600")
+    authenticated_page.locator("#app-dialog-confirm").click()
+    authenticated_page.wait_for_function(
+        "() => document.body.classList.contains('readonly-mode') === false"
+    )
+
+    assert authenticated_page.locator("#brand-auth-btn").get_attribute("aria-label") == "锁定"
+    status = authenticated_page.evaluate(
+        "() => fetch('/api/auth/status').then(response => response.json())"
+    )
+    assert status["admin_initialized"] is True
+    assert status["admin_unlocked"] is True
+
+    authenticated_page.locator("#brand-auth-btn").click()
+    authenticated_page.locator("#app-dialog-confirm").click()
+    authenticated_page.wait_for_function(
+        "() => document.body.classList.contains('readonly-mode') === true"
+    )
+
+    authenticated_page.locator("#brand-auth-btn").click()
+    authenticated_page.locator("#auth-session-duration").select_option("3600")
+    authenticated_page.locator("#app-dialog-confirm").click()
+    authenticated_page.wait_for_function(
+        "() => document.body.classList.contains('readonly-mode') === false"
+    )
+
+    login_status = authenticated_page.evaluate(
+        "() => fetch('/api/auth/status').then(response => response.json())"
+    )
+    assert login_status["admin_initialized"] is True
+    assert login_status["admin_unlocked"] is True
 
 
 def test_readonly_bookmark_rows_keep_reading_layout(page, live_server):
