@@ -920,7 +920,7 @@ async fn passkey_delete(
 
     let now = auth::now_timestamp();
     auth::delete_admin_credential(db, credential_id).await?;
-    auth::revoke_sessions_for_credential(db, credential_id, now).await?;
+    auth::revoke_sessions_for_deleted_credential(db, credential_id, now).await?;
 
     Ok(Ok(json!({
         "ok": true,

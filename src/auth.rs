@@ -941,6 +941,40 @@ pub async fn revoke_sessions_for_credential(
     Ok(())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CredentialDeleteRevokeTarget {
+    AdminSessions,
+    AppDeviceSessions,
+}
+
+const DELETED_CREDENTIAL_REVOKE_TARGETS: &[CredentialDeleteRevokeTarget] = &[
+    CredentialDeleteRevokeTarget::AdminSessions,
+    CredentialDeleteRevokeTarget::AppDeviceSessions,
+];
+
+fn deleted_credential_revoke_targets() -> &'static [CredentialDeleteRevokeTarget] {
+    DELETED_CREDENTIAL_REVOKE_TARGETS
+}
+
+pub async fn revoke_sessions_for_deleted_credential(
+    db: &D1Database,
+    credential_id: &str,
+    revoked_at: i64,
+) -> Result<()> {
+    for target in deleted_credential_revoke_targets() {
+        match target {
+            CredentialDeleteRevokeTarget::AdminSessions => {
+                revoke_sessions_for_credential(db, credential_id, revoked_at).await?;
+            }
+            CredentialDeleteRevokeTarget::AppDeviceSessions => {
+                revoke_app_device_sessions_for_credential(db, credential_id, revoked_at).await?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub async fn insert_app_device_session(
     db: &D1Database,
     session: &NewAppDeviceSession,
@@ -1192,6 +1226,17 @@ mod tests {
         assert_eq!(
             app_device_token_prefix("lwapp_abcdefghijklmnopqrstuvwxyz"),
             "lwapp_abcdefgh"
+        );
+    }
+
+    #[test]
+    fn deleted_credential_revokes_web_and_app_sessions() {
+        assert_eq!(
+            deleted_credential_revoke_targets(),
+            &[
+                CredentialDeleteRevokeTarget::AdminSessions,
+                CredentialDeleteRevokeTarget::AppDeviceSessions,
+            ]
         );
     }
 }
