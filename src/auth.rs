@@ -4,7 +4,7 @@ use crate::crypto;
 use crate::models::{AdminCredential, AdminSession, AppDeviceSession, AuthChallenge, CountValue};
 use js_sys::wasm_bindgen::JsCast;
 use js_sys::{Reflect, Uint8Array};
-use worker::d1::{D1Database, D1Type};
+use worker::d1::{D1Database, D1Result, D1Type};
 use worker::*;
 
 pub const ADMIN_SESSION_COOKIE: &str = "linkwise_admin_session";
@@ -908,6 +908,17 @@ pub async fn revoke_admin_session(
     Ok(())
 }
 
+pub async fn delete_revoked_admin_session(db: &D1Database, session_id: &str) -> Result<bool> {
+    let args = [D1Type::Text(session_id)];
+    let result = db
+        .prepare("DELETE FROM admin_sessions WHERE id = ? AND revoked_at IS NOT NULL")
+        .bind_refs(&args)?
+        .run()
+        .await?;
+
+    Ok(result_changes(&result)? > 0)
+}
+
 pub async fn revoke_all_admin_sessions(db: &D1Database, revoked_at: i64) -> Result<()> {
     let args = [D1Type::Integer(revoked_at as i32)];
     db.prepare("UPDATE admin_sessions SET revoked_at = ? WHERE revoked_at IS NULL")
@@ -1069,6 +1080,17 @@ pub async fn revoke_app_device_session(
     Ok(())
 }
 
+pub async fn delete_revoked_app_device_session(db: &D1Database, session_id: &str) -> Result<bool> {
+    let args = [D1Type::Text(session_id)];
+    let result = db
+        .prepare("DELETE FROM app_device_sessions WHERE id = ? AND revoked_at IS NOT NULL")
+        .bind_refs(&args)?
+        .run()
+        .await?;
+
+    Ok(result_changes(&result)? > 0)
+}
+
 pub async fn revoke_all_app_device_sessions(db: &D1Database, revoked_at: i64) -> Result<()> {
     let args = [D1Type::Integer(revoked_at as i32)];
     db.prepare("UPDATE app_device_sessions SET revoked_at = ? WHERE revoked_at IS NULL")
@@ -1191,6 +1213,13 @@ pub async fn record_setup_auth_failure(db: &D1Database, bucket: &str, now: i64) 
     }
 
     record_auth_failure(db, bucket, now, locked_until).await
+}
+
+fn result_changes(result: &D1Result) -> Result<usize> {
+    Ok(result
+        .meta()?
+        .and_then(|meta| meta.changes)
+        .unwrap_or_default())
 }
 
 #[cfg(test)]

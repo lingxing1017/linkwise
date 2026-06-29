@@ -129,9 +129,11 @@ def test_setup_token_failures_are_rate_limited(api_client):
         ("POST", "/api/auth/logout"),
         ("DELETE", "/api/auth/passkeys/missing"),
         ("DELETE", "/api/auth/sessions/missing"),
+        ("POST", "/api/auth/sessions/missing/revoke"),
         ("POST", "/api/auth/sessions/revoke-all"),
         ("POST", "/api/auth/app-devices"),
         ("DELETE", "/api/auth/app-devices/missing"),
+        ("POST", "/api/auth/app-devices/missing/revoke"),
         ("POST", "/api/auth/app-devices/revoke-all"),
     ],
 )
@@ -155,9 +157,11 @@ def test_auth_mutations_require_json_content_type(api_client, method, path):
         ("POST", "/api/auth/logout", {}),
         ("DELETE", "/api/auth/passkeys/missing", {}),
         ("DELETE", "/api/auth/sessions/missing", {}),
+        ("POST", "/api/auth/sessions/missing/revoke", {}),
         ("POST", "/api/auth/sessions/revoke-all", {}),
         ("POST", "/api/auth/app-devices", {}),
         ("DELETE", "/api/auth/app-devices/missing", {}),
+        ("POST", "/api/auth/app-devices/missing/revoke", {}),
         ("POST", "/api/auth/app-devices/revoke-all", {}),
     ],
 )
@@ -254,6 +258,7 @@ def test_management_apis_require_admin_session(api_client, method, path, payload
         ("GET", "/api/auth/app-devices", None),
         ("POST", "/api/auth/app-devices", {"name": "Phone"}),
         ("DELETE", "/api/auth/app-devices/missing", {}),
+        ("POST", "/api/auth/app-devices/missing/revoke", {}),
         ("POST", "/api/auth/app-devices/revoke-all", {}),
     ],
 )
@@ -293,7 +298,7 @@ def test_app_device_revoke_marks_device_revoked(api_client):
     create = api_client.post("/api/auth/app-devices", {"name": unique_id("revoke-device")})
     device_id = create.json()["device"]["id"]
 
-    revoke = api_client.request("DELETE", f"/api/auth/app-devices/{device_id}", {})
+    revoke = api_client.post(f"/api/auth/app-devices/{device_id}/revoke", {})
     result = revoke.json()
 
     assert revoke.status == 200
@@ -303,6 +308,51 @@ def test_app_device_revoke_marks_device_revoked(api_client):
     listed = api_client.get("/api/auth/app-devices").json()
     device = next(item for item in listed["devices"] if item["id"] == device_id)
     assert device["revoked_at"]
+
+
+@requires_admin_session
+def test_revoked_app_device_can_be_deleted(api_client):
+    create = api_client.post("/api/auth/app-devices", {"name": unique_id("delete-device")})
+    device_id = create.json()["device"]["id"]
+
+    revoke = api_client.post(f"/api/auth/app-devices/{device_id}/revoke", {})
+    assert revoke.status == 200
+
+    delete = api_client.request("DELETE", f"/api/auth/app-devices/{device_id}", {})
+    result = delete.json()
+
+    assert delete.status == 200
+    assert result["ok"] is True
+    assert result["deleted_device_id"] == device_id
+
+    listed = api_client.get("/api/auth/app-devices").json()
+    assert all(item["id"] != device_id for item in listed["devices"])
+
+
+@requires_admin_session
+def test_active_app_device_cannot_be_deleted(api_client):
+    create = api_client.post("/api/auth/app-devices", {"name": unique_id("active-device")})
+    device_id = create.json()["device"]["id"]
+
+    delete = api_client.request("DELETE", f"/api/auth/app-devices/{device_id}", {})
+    result = delete.json()
+
+    assert delete.status == 409
+    assert result["status"] == "error"
+    assert result["error"] == "not_revoked"
+
+
+@requires_admin_session
+def test_active_admin_session_cannot_be_deleted(api_client):
+    sessions = api_client.get("/api/auth/sessions").json()["sessions"]
+    current_session = next(item for item in sessions if item["current"])
+
+    delete = api_client.request("DELETE", f"/api/auth/sessions/{current_session['id']}", {})
+    result = delete.json()
+
+    assert delete.status == 409
+    assert result["status"] == "error"
+    assert result["error"] == "not_revoked"
 
 
 @requires_admin_session

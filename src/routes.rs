@@ -136,12 +136,21 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
                 Err(error) => Err(error),
             }
         })
-        .delete_async("/api/auth/sessions/:session_id", |req, ctx| async move {
+        .post_async("/api/auth/sessions/:session_id/revoke", |req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
             let session_id = ctx.param("session_id").map(String::as_str).unwrap_or("");
             match session_revoke(&db, &req, &ctx.env, session_id).await {
                 Ok(Ok((response, Some(cookie)))) => json_with_cookie(&response, &cookie),
                 Ok(Ok((response, None))) => Response::from_json(&response),
+                Ok(Err((status, body))) => json_with_status(&body, status),
+                Err(error) => Err(error),
+            }
+        })
+        .delete_async("/api/auth/sessions/:session_id", |req, ctx| async move {
+            let db = initialized_db(&ctx.env).await?;
+            let session_id = ctx.param("session_id").map(String::as_str).unwrap_or("");
+            match session_delete(&db, &req, &ctx.env, session_id).await {
+                Ok(Ok(response)) => Response::from_json(&response),
                 Ok(Err((status, body))) => json_with_status(&body, status),
                 Err(error) => Err(error),
             }
@@ -171,10 +180,19 @@ pub async fn handle(req: Request, env: Env) -> Result<Response> {
                 Err(error) => Err(error),
             }
         })
-        .delete_async("/api/auth/app-devices/:device_id", |req, ctx| async move {
+        .post_async("/api/auth/app-devices/:device_id/revoke", |req, ctx| async move {
             let db = initialized_db(&ctx.env).await?;
             let device_id = ctx.param("device_id").map(String::as_str).unwrap_or("");
             match app_device_revoke(&db, &req, &ctx.env, device_id).await {
+                Ok(Ok(response)) => Response::from_json(&response),
+                Ok(Err((status, body))) => json_with_status(&body, status),
+                Err(error) => Err(error),
+            }
+        })
+        .delete_async("/api/auth/app-devices/:device_id", |req, ctx| async move {
+            let db = initialized_db(&ctx.env).await?;
+            let device_id = ctx.param("device_id").map(String::as_str).unwrap_or("");
+            match app_device_delete(&db, &req, &ctx.env, device_id).await {
                 Ok(Ok(response)) => Response::from_json(&response),
                 Ok(Err((status, body))) => json_with_status(&body, status),
                 Err(error) => Err(error),
@@ -1032,6 +1050,40 @@ async fn session_revoke_all(
     )))
 }
 
+async fn session_delete(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+    session_id: &str,
+) -> Result<Result<serde_json::Value, (u16, serde_json::Value)>> {
+    if let Err(error) = require_auth_json_state_change(req, env).await? {
+        return Ok(Err(error));
+    }
+
+    if let Err(error) = auth::require_admin_session(db, req).await {
+        return Ok(Err(guard_error(error)));
+    }
+
+    if session_id.is_empty() {
+        return Ok(Err((
+            400,
+            auth_error(400, "invalid_request", "Session ID 无效"),
+        )));
+    }
+
+    if !auth::delete_revoked_admin_session(db, session_id).await? {
+        return Ok(Err((
+            409,
+            auth_error(409, "not_revoked", "只能删除已撤销的会话"),
+        )));
+    }
+
+    Ok(Ok(json!({
+        "ok": true,
+        "deleted_session_id": session_id
+    })))
+}
+
 async fn app_device_list(
     db: &D1Database,
     req: &Request,
@@ -1157,6 +1209,40 @@ async fn app_device_revoke_all(
 
     Ok(Ok(json!({
         "ok": true
+    })))
+}
+
+async fn app_device_delete(
+    db: &D1Database,
+    req: &Request,
+    env: &Env,
+    device_id: &str,
+) -> Result<Result<serde_json::Value, (u16, serde_json::Value)>> {
+    if let Err(error) = require_auth_json_state_change(req, env).await? {
+        return Ok(Err(error));
+    }
+
+    if let Err(error) = auth::require_admin_session(db, req).await {
+        return Ok(Err(guard_error(error)));
+    }
+
+    if device_id.is_empty() {
+        return Ok(Err((
+            400,
+            auth_error(400, "invalid_request", "App 设备 ID 无效"),
+        )));
+    }
+
+    if !auth::delete_revoked_app_device_session(db, device_id).await? {
+        return Ok(Err((
+            409,
+            auth_error(409, "not_revoked", "只能删除已撤销的 App 设备"),
+        )));
+    }
+
+    Ok(Ok(json!({
+        "ok": true,
+        "deleted_device_id": device_id
     })))
 }
 

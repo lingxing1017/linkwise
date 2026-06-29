@@ -650,7 +650,23 @@ def test_auth_management_lists_app_devices_without_tokens(page, live_server):
             route.fulfill(json={"ok": True, "passkeys": []})
             return
         if url.endswith("/api/auth/sessions"):
-            route.fulfill(json={"ok": True, "sessions": []})
+            route.fulfill(
+                json={
+                    "ok": True,
+                    "sessions": [
+                        {
+                            "id": "session-revoked",
+                            "credential_id": "credential-1",
+                            "credential_name": "旧 Passkey",
+                            "created_at": 1781900000,
+                            "last_seen_at": 1782000000,
+                            "expires_at": 1782003600,
+                            "revoked_at": 1782000100,
+                            "current": False,
+                        }
+                    ],
+                }
+            )
             return
         if url.endswith("/api/auth/app-devices"):
             route.fulfill(
@@ -665,6 +681,15 @@ def test_auth_management_lists_app_devices_without_tokens(page, live_server):
                             "created_at": 1781999999,
                             "last_seen_at": None,
                             "revoked_at": None,
+                        },
+                        {
+                            "id": "device-revoked",
+                            "name": "Old iPad",
+                            "token_prefix": "lwapp_zzzz9999",
+                            "issued_by_credential_name": "Touch ID",
+                            "created_at": 1781888888,
+                            "last_seen_at": 1781990000,
+                            "revoked_at": 1781999999,
                         }
                     ],
                 }
@@ -682,6 +707,8 @@ def test_auth_management_lists_app_devices_without_tokens(page, live_server):
     assert page.locator("#auth-app-device-list").inner_text().find("iPhone") >= 0
     assert page.locator("#auth-app-device-list").inner_text().find("lwapp_abcd1234") >= 0
     assert "lwapp_supersecret" not in page.locator("#auth-app-device-list").inner_text()
+    assert page.locator("#auth-session-list .auth-list-item.muted .row-btn", has_text="移除").is_visible()
+    assert page.locator("#auth-app-device-list .auth-list-item.muted .row-btn", has_text="移除").is_visible()
 
 
 def test_expiring_auth_icon_shows_countdown_ring(page, live_server):

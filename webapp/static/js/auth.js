@@ -357,8 +357,8 @@ window.revokeSession = async function(sessionId) {
 
     if (!confirmed) return;
 
-    const res = await fetch(`${API_BASE}/auth/sessions/${encodeURIComponent(sessionId)}`, {
-        method: 'DELETE',
+    const res = await fetch(`${API_BASE}/auth/sessions/${encodeURIComponent(sessionId)}/revoke`, {
+        method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
@@ -372,6 +372,33 @@ window.revokeSession = async function(sessionId) {
     }
 
     await refreshAuthStatus();
+    await loadAuthManagement();
+};
+
+window.deleteRevokedSession = async function(sessionId) {
+    if (!requireAdminUiAction()) return;
+
+    const confirmed = await showConfirm('从列表和数据库中删除这个已撤销会话吗？', {
+        title: '删除会话记录',
+        confirmText: '删除'
+    });
+
+    if (!confirmed) return;
+
+    const res = await fetch(`${API_BASE}/auth/sessions/${encodeURIComponent(sessionId)}`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
+    });
+    const result = await parseApiJson(res, '删除会话记录失败');
+
+    if (!res.ok || !result.ok) {
+        await showMessage(result.message || '删除会话记录失败', '会话');
+        return;
+    }
+
     await loadAuthManagement();
 };
 
@@ -446,8 +473,8 @@ window.revokeAppDevice = async function(deviceId) {
 
     if (!confirmed) return;
 
-    const res = await fetch(`${API_BASE}/auth/app-devices/${encodeURIComponent(deviceId)}`, {
-        method: 'DELETE',
+    const res = await fetch(`${API_BASE}/auth/app-devices/${encodeURIComponent(deviceId)}/revoke`, {
+        method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
@@ -461,6 +488,33 @@ window.revokeAppDevice = async function(deviceId) {
     }
 
     await loadAppDevices();
+};
+
+window.deleteRevokedAppDevice = async function(deviceId) {
+    if (!requireAdminUiAction()) return;
+
+    const confirmed = await showConfirm('从列表和数据库中删除这个已撤销 App 设备吗？', {
+        title: '删除 App 设备记录',
+        confirmText: '删除'
+    });
+
+    if (!confirmed) return;
+
+    const res = await fetch(`${API_BASE}/auth/app-devices/${encodeURIComponent(deviceId)}`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
+    });
+    const result = await parseApiJson(res, '删除 App 设备记录失败');
+
+    if (!res.ok || !result.ok) {
+        await showMessage(result.message || '删除 App 设备记录失败', 'App 设备');
+        return;
+    }
+
+    await loadAuthManagement();
 };
 
 window.revokeAllAppDevices = async function() {
@@ -551,7 +605,9 @@ async function loadSessions() {
                         </div>
                         <div class="auth-list-meta">最近使用 ${formatAuthTime(session.last_seen_at)} · 过期 ${formatAuthTime(session.expires_at)}</div>
                     </div>
-                    ${revoked ? '' : `<button type="button" class="row-btn danger" onclick="revokeSession('${escapeHtml(session.id)}')">撤销</button>`}
+                    ${revoked
+                        ? `<button type="button" class="row-btn danger" onclick="deleteRevokedSession('${escapeHtml(session.id)}')">移除</button>`
+                        : `<button type="button" class="row-btn danger" onclick="revokeSession('${escapeHtml(session.id)}')">撤销</button>`}
                 </div>
             `;
         }).join('')
@@ -584,7 +640,9 @@ async function loadAppDevices() {
                         </div>
                         <div class="auth-list-meta">${escapeHtml(device.token_prefix || '')} · ${lastSeen}创建于 ${formatAuthTime(device.created_at)} · 签发 ${escapeHtml(issuer)}</div>
                     </div>
-                    ${revoked ? '' : `<button type="button" class="row-btn danger" onclick="revokeAppDevice('${escapeHtml(device.id)}')">撤销</button>`}
+                    ${revoked
+                        ? `<button type="button" class="row-btn danger" onclick="deleteRevokedAppDevice('${escapeHtml(device.id)}')">移除</button>`
+                        : `<button type="button" class="row-btn danger" onclick="revokeAppDevice('${escapeHtml(device.id)}')">撤销</button>`}
                 </div>
             `;
         }).join('')
