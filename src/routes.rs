@@ -1071,10 +1071,10 @@ async fn session_delete(
         )));
     }
 
-    if !auth::delete_revoked_admin_session(db, session_id).await? {
+    if !auth::delete_inactive_admin_session(db, session_id, auth::now_timestamp()).await? {
         return Ok(Err((
             409,
-            auth_error(409, "not_revoked", "只能删除已撤销的会话"),
+            auth_error(409, "not_inactive", "只能删除已撤销或已过期的会话"),
         )));
     }
 

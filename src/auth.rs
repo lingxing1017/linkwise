@@ -908,10 +908,14 @@ pub async fn revoke_admin_session(
     Ok(())
 }
 
-pub async fn delete_revoked_admin_session(db: &D1Database, session_id: &str) -> Result<bool> {
-    let args = [D1Type::Text(session_id)];
+pub async fn delete_inactive_admin_session(
+    db: &D1Database,
+    session_id: &str,
+    now: i64,
+) -> Result<bool> {
+    let args = [D1Type::Text(session_id), D1Type::Integer(now as i32)];
     let result = db
-        .prepare("DELETE FROM admin_sessions WHERE id = ? AND revoked_at IS NOT NULL")
+        .prepare("DELETE FROM admin_sessions WHERE id = ? AND (revoked_at IS NOT NULL OR expires_at <= ?)")
         .bind_refs(&args)?
         .run()
         .await?;

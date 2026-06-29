@@ -663,6 +663,16 @@ def test_auth_management_lists_app_devices_without_tokens(page, live_server):
                             "expires_at": 1782003600,
                             "revoked_at": 1782000100,
                             "current": False,
+                        },
+                        {
+                            "id": "session-expired",
+                            "credential_id": "credential-2",
+                            "credential_name": "过期 Passkey",
+                            "created_at": 1781800000,
+                            "last_seen_at": 1781900000,
+                            "expires_at": 1,
+                            "revoked_at": None,
+                            "current": False,
                         }
                     ],
                 }
@@ -707,7 +717,8 @@ def test_auth_management_lists_app_devices_without_tokens(page, live_server):
     assert page.locator("#auth-app-device-list").inner_text().find("iPhone") >= 0
     assert page.locator("#auth-app-device-list").inner_text().find("lwapp_abcd1234") >= 0
     assert "lwapp_supersecret" not in page.locator("#auth-app-device-list").inner_text()
-    assert page.locator("#auth-session-list .auth-list-item.muted .row-btn", has_text="移除").is_visible()
+    assert page.locator("#auth-session-list .auth-list-item.muted .row-btn", has_text="移除").count() == 2
+    assert page.locator("#auth-session-list").inner_text().find("已过期") >= 0
     assert page.locator("#auth-app-device-list .auth-list-item.muted .row-btn", has_text="移除").is_visible()
 
 

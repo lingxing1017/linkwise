@@ -352,7 +352,7 @@ def test_active_admin_session_cannot_be_deleted(api_client):
 
     assert delete.status == 409
     assert result["status"] == "error"
-    assert result["error"] == "not_revoked"
+    assert result["error"] == "not_inactive"
 
 
 @requires_admin_session

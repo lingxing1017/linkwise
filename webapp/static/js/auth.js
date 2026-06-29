@@ -595,17 +595,20 @@ async function loadSessions() {
     authSessionList.innerHTML = sessions.length
         ? sessions.map((session) => {
             const revoked = Boolean(session.revoked_at);
+            const expired = !revoked && Number(session.expires_at || 0) <= Math.floor(Date.now() / 1000);
+            const inactive = revoked || expired;
             return `
-                <div class="auth-list-item ${revoked ? 'muted' : ''}">
+                <div class="auth-list-item ${inactive ? 'muted' : ''}">
                     <div class="auth-list-main">
                         <div class="auth-list-name">
                             ${escapeHtml(session.credential_name || '未知 Passkey')}
                             ${session.current ? '<span class="auth-pill">当前</span>' : ''}
                             ${revoked ? '<span class="auth-pill muted">已撤销</span>' : ''}
+                            ${expired ? '<span class="auth-pill muted">已过期</span>' : ''}
                         </div>
                         <div class="auth-list-meta">最近使用 ${formatAuthTime(session.last_seen_at)} · 过期 ${formatAuthTime(session.expires_at)}</div>
                     </div>
-                    ${revoked
+                    ${inactive
                         ? `<button type="button" class="row-btn danger" onclick="deleteRevokedSession('${escapeHtml(session.id)}')">移除</button>`
                         : `<button type="button" class="row-btn danger" onclick="revokeSession('${escapeHtml(session.id)}')">撤销</button>`}
                 </div>
