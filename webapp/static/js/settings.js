@@ -30,6 +30,34 @@ async function loadWebdavConfig() {
     if (webdavFilenameInput) {
         webdavFilenameInput.value = config.filename || 'linkwise-bookmarks.html';
     }
+
+    syncWebdavStatus(config);
+}
+
+function syncWebdavStatus(config = getWebdavConfigPayload()) {
+    const hasConfig = Boolean(config.webdav_url && config.username);
+    const statusSwitch = document.getElementById('webdav-status-switch');
+    const statusTitle = document.getElementById('webdav-status-title');
+    const statusSubtitle = document.getElementById('webdav-status-subtitle');
+    const statusMeta = document.getElementById('webdav-status-meta');
+
+    if (statusSwitch) {
+        statusSwitch.classList.toggle('active', hasConfig);
+    }
+
+    if (statusTitle) {
+        statusTitle.textContent = hasConfig ? '已配置 WebDAV 同步' : 'WebDAV 同步未配置';
+    }
+
+    if (statusSubtitle) {
+        statusSubtitle.textContent = hasConfig
+            ? '保存后将使用当前 WebDAV 配置'
+            : '填写地址和用户名后即可保存配置';
+    }
+
+    if (statusMeta) {
+        statusMeta.textContent = hasConfig ? '配置已读取' : '等待配置';
+    }
 }
 
 function getWebdavConfigPayload() {
@@ -106,9 +134,18 @@ window.saveWebdavConfig = async function() {
                 : 'WebDAV 密码或 App Password';
         }
 
+        syncWebdavStatus(result.config);
         await showMessage('WebDAV 配置已保存。', '设置');
     } catch (err) {
         console.error('保存设置失败:', err);
         await showMessage(`保存设置失败：${err.message}`, '设置');
     }
+};
+
+window.testWebdavConnection = async function() {
+    await showMessage('当前版本仅支持保存 WebDAV 配置，连接测试接口尚未接入。', '测试连接');
+};
+
+window.backupWebdavNow = async function() {
+    await showMessage('当前版本仅支持保存 WebDAV 配置，立即备份接口尚未接入。', '立即备份');
 };

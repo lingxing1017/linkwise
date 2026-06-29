@@ -278,64 +278,112 @@
             </div>
 
             <div class="settings-panel active" id="settings-panel-backup" role="tabpanel" aria-labelledby="settings-tab-backup">
+                <div class="settings-status-card">
+                    <div class="settings-sync-state">
+                        <span class="settings-switch" id="webdav-status-switch" aria-hidden="true"></span>
+                        <div>
+                            <div class="settings-status-title" id="webdav-status-title">WebDAV 同步</div>
+                            <div class="settings-status-subtitle" id="webdav-status-subtitle">正在读取配置...</div>
+                        </div>
+                    </div>
+                    <div class="settings-status-meta">
+                        <span id="webdav-status-meta">保存后可用于备份导出</span>
+                    </div>
+                </div>
+
                 <div class="settings-section">
-                    <div class="settings-section-title">WebDAV 配置</div>
-
-                    <div class="input-group">
-                        <label>WebDAV 地址</label>
-                        <input type="url" id="webdav-url" placeholder="https://example.com/dav">
+                    <div class="settings-section-header">
+                        <div>
+                            <div class="settings-section-title">WebDAV 配置</div>
+                            <div class="settings-section-desc">填写远程存储信息，用于同步 Linkwise 书签备份。</div>
+                        </div>
                     </div>
 
-                    <div class="input-group">
-                        <label>用户名</label>
-                        <input type="text" id="webdav-username" autocomplete="username" placeholder="WebDAV 用户名">
-                    </div>
+                    <div class="settings-form-grid">
+                        <div class="input-group">
+                            <label>WebDAV 地址</label>
+                            <input type="url" id="webdav-url" placeholder="https://example.com/dav">
+                        </div>
 
-                    <div class="input-group">
-                        <label>密码</label>
-                        <input type="password" id="webdav-password" autocomplete="current-password" placeholder="WebDAV 密码或 App Password">
-                    </div>
+                        <div class="input-group">
+                            <label>用户名</label>
+                            <input type="text" id="webdav-username" autocomplete="username" placeholder="WebDAV 用户名">
+                        </div>
 
-                    <div class="input-group">
-                        <label>远程目录</label>
-                        <input type="text" id="webdav-remote-dir" placeholder="例如：Linkwise">
-                    </div>
+                        <div class="input-group">
+                            <label>密码</label>
+                            <input type="password" id="webdav-password" autocomplete="current-password" placeholder="WebDAV 密码或 App Password">
+                            <div class="input-help">建议使用 App Password</div>
+                        </div>
 
-                    <div class="input-group">
-                        <label>备份文件名</label>
-                        <input type="text" id="webdav-filename" placeholder="linkwise-bookmarks.html">
+                        <div class="input-group">
+                            <label>远程目录</label>
+                            <input type="text" id="webdav-remote-dir" placeholder="例如：Linkwise">
+                        </div>
+
+                        <div class="input-group">
+                            <label>备份文件名</label>
+                            <input type="text" id="webdav-filename" placeholder="linkwise-bookmarks.html">
+                        </div>
                     </div>
 
                     <div class="settings-panel-actions">
-                        <button type="button" class="btn-save" onclick="saveWebdavConfig()">保存配置</button>
+                        <div class="settings-secondary-actions">
+                            <button type="button" class="btn-close" onclick="testWebdavConnection()">测试连接</button>
+                            <button type="button" class="btn-close" onclick="backupWebdavNow()">立即备份</button>
+                        </div>
+                        <button type="button" class="btn-save" onclick="saveWebdavConfig()">保存</button>
                     </div>
                 </div>
             </div>
 
             <div class="settings-panel" id="settings-panel-auth" role="tabpanel" aria-labelledby="settings-tab-auth" hidden>
                 <div class="settings-section auth-management-section">
-                    <div class="settings-section-title">Passkey 与会话</div>
-
-                    <div class="auth-management-actions">
-                        <button type="button" class="btn-save" onclick="addPasskey()">新增 Passkey</button>
-                        <button type="button" class="btn-close" onclick="revokeAllSessions()">撤销全部会话</button>
-                        <button type="button" class="btn-save" onclick="createAppDevice()">新增 App 设备</button>
-                        <button type="button" class="btn-close" onclick="revokeAllAppDevices()">撤销全部 App 设备</button>
-                    </div>
-
-                    <div class="auth-list-block">
-                        <div class="auth-list-title">Passkey</div>
+                    <div class="auth-settings-group">
+                        <div class="settings-section-header">
+                            <div>
+                                <div class="settings-section-title">登录方式</div>
+                                <div class="settings-section-desc">使用 Passkey 快速登录当前账号。</div>
+                            </div>
+                            <div class="auth-section-actions">
+                                <button type="button" class="btn-save" onclick="addPasskey()">新增 Passkey</button>
+                            </div>
+                        </div>
                         <div class="auth-list" id="auth-passkey-list"></div>
                     </div>
 
-                    <div class="auth-list-block">
-                        <div class="auth-list-title">设备 / Session</div>
+                    <div class="auth-settings-group">
+                        <div class="settings-section-header">
+                            <div>
+                                <div class="settings-section-title">活跃会话</div>
+                                <div class="settings-section-desc">管理当前账号的浏览器会话。</div>
+                            </div>
+                        </div>
                         <div class="auth-list" id="auth-session-list"></div>
                     </div>
 
-                    <div class="auth-list-block">
-                        <div class="auth-list-title">App 设备</div>
+                    <div class="auth-settings-group">
+                        <div class="settings-section-header">
+                            <div>
+                                <div class="settings-section-title">App 设备</div>
+                                <div class="settings-section-desc">给自动化或其他客户端签发独立设备令牌。</div>
+                            </div>
+                            <div class="auth-section-actions">
+                                <button type="button" class="btn-save" onclick="createAppDevice()">新增 App 设备</button>
+                            </div>
+                        </div>
                         <div class="auth-list" id="auth-app-device-list"></div>
+                    </div>
+
+                    <div class="auth-danger-zone">
+                        <div>
+                            <div class="auth-danger-title">危险操作</div>
+                            <div class="auth-danger-desc">这些操作不可撤销，请谨慎操作。</div>
+                        </div>
+                        <div class="auth-danger-actions">
+                            <button type="button" class="btn-danger-outline" onclick="revokeAllSessions()">撤销全部会话</button>
+                            <button type="button" class="btn-danger-outline" onclick="revokeAllAppDevices()">撤销全部 App 设备</button>
+                        </div>
                     </div>
                 </div>
             </div>

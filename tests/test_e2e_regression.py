@@ -536,7 +536,9 @@ def test_settings_dialog_stays_inside_viewport(page, live_server):
     assert page.locator("#settings-tab-backup").get_attribute("aria-selected") == "true"
     assert page.locator("#settings-panel-backup").is_visible()
     assert page.locator("#settings-panel-auth").is_hidden()
-    assert page.locator("#settings-panel-backup .btn-save", has_text="保存配置").is_visible()
+    assert page.locator("#settings-panel-backup .settings-status-card").is_visible()
+    assert page.locator("#settings-panel-backup .btn-save", has_text="保存").is_visible()
+    assert page.locator("#settings-panel-backup .settings-secondary-actions").is_visible()
     assert page.locator(".settings-box > .dialog-actions .btn-save").count() == 0
     assert page.locator("#settings-panel-backup").evaluate(
         "node => getComputedStyle(node).overflowY"
@@ -567,7 +569,10 @@ def test_settings_dialog_stays_inside_viewport(page, live_server):
     assert page.locator("#settings-panel-auth").is_visible()
     assert page.locator("#settings-panel-backup").is_hidden()
 
-    action_button_metrics = page.locator(".auth-management-actions .btn-save").evaluate(
+    assert page.locator(".auth-danger-zone").is_visible()
+    assert page.locator(".auth-danger-zone .btn-danger-outline").count() == 2
+
+    action_button_metrics = page.locator(".auth-section-actions .btn-save").first.evaluate(
         """
         (node) => {
             const rect = node.getBoundingClientRect();

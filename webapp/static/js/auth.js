@@ -516,11 +516,11 @@ async function loadPasskeys() {
     authPasskeyList.innerHTML = passkeys.length
         ? passkeys.map((passkey) => `
             <div class="auth-list-item">
-                <div>
+                <div class="auth-list-main">
                     <div class="auth-list-name">${escapeHtml(passkey.name || 'Passkey')}</div>
                     <div class="auth-list-meta">创建于 ${formatAuthTime(passkey.created_at)}</div>
                 </div>
-                <button type="button" class="row-btn icon-btn danger" onclick="deletePasskey('${escapeHtml(passkey.credential_id)}')">×</button>
+                <button type="button" class="row-btn danger" onclick="deletePasskey('${escapeHtml(passkey.credential_id)}')">移除</button>
             </div>
         `).join('')
         : '<div class="auth-empty">暂无 Passkey</div>';
@@ -543,7 +543,7 @@ async function loadSessions() {
             const revoked = Boolean(session.revoked_at);
             return `
                 <div class="auth-list-item ${revoked ? 'muted' : ''}">
-                    <div>
+                    <div class="auth-list-main">
                         <div class="auth-list-name">
                             ${escapeHtml(session.credential_name || '未知 Passkey')}
                             ${session.current ? '<span class="auth-pill">当前</span>' : ''}
@@ -551,7 +551,7 @@ async function loadSessions() {
                         </div>
                         <div class="auth-list-meta">最近使用 ${formatAuthTime(session.last_seen_at)} · 过期 ${formatAuthTime(session.expires_at)}</div>
                     </div>
-                    ${revoked ? '' : `<button type="button" class="row-btn icon-btn danger" onclick="revokeSession('${escapeHtml(session.id)}')">×</button>`}
+                    ${revoked ? '' : `<button type="button" class="row-btn danger" onclick="revokeSession('${escapeHtml(session.id)}')">撤销</button>`}
                 </div>
             `;
         }).join('')
@@ -577,14 +577,14 @@ async function loadAppDevices() {
             const lastSeen = device.last_seen_at ? `最近使用 ${formatAuthTime(device.last_seen_at)} · ` : '';
             return `
                 <div class="auth-list-item ${revoked ? 'muted' : ''}">
-                    <div>
+                    <div class="auth-list-main">
                         <div class="auth-list-name">
                             ${escapeHtml(device.name || 'App 设备')}
                             ${revoked ? '<span class="auth-pill muted">已撤销</span>' : ''}
                         </div>
                         <div class="auth-list-meta">${escapeHtml(device.token_prefix || '')} · ${lastSeen}创建于 ${formatAuthTime(device.created_at)} · 签发 ${escapeHtml(issuer)}</div>
                     </div>
-                    ${revoked ? '' : `<button type="button" class="row-btn icon-btn danger" onclick="revokeAppDevice('${escapeHtml(device.id)}')">×</button>`}
+                    ${revoked ? '' : `<button type="button" class="row-btn danger" onclick="revokeAppDevice('${escapeHtml(device.id)}')">撤销</button>`}
                 </div>
             `;
         }).join('')
