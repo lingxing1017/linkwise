@@ -965,10 +965,6 @@ pub async fn update_webdav_config(
             "webdav_username".to_string(),
             payload.username.unwrap_or_default().trim().to_string(),
         ),
-        (
-            "webdav_remote_dir".to_string(),
-            payload.remote_dir.unwrap_or_default().trim().to_string(),
-        ),
         ("webdav_filename".to_string(), filename),
     ];
 
@@ -997,6 +993,7 @@ pub async fn update_webdav_config(
     if !password.is_empty() {
         delete_settings(db, &["webdav_password"]).await?;
     }
+    delete_settings(db, &["webdav_remote_dir"]).await?;
 
     webdav_config(db).await.map(Ok)
 }
@@ -1299,7 +1296,6 @@ const WEBDAV_SETTING_KEYS: &[&str] = &[
     "webdav_password",
     "webdav_password_ciphertext",
     "webdav_password_nonce",
-    "webdav_remote_dir",
     "webdav_filename",
 ];
 
@@ -1377,10 +1373,6 @@ fn build_webdav_config(settings: HashMap<String, String>) -> WebdavConfig {
     WebdavConfig {
         webdav_url: settings.get("webdav_url").cloned().unwrap_or_default(),
         username: settings.get("webdav_username").cloned().unwrap_or_default(),
-        remote_dir: settings
-            .get("webdav_remote_dir")
-            .cloned()
-            .unwrap_or_default(),
         filename: settings
             .get("webdav_filename")
             .filter(|value| !value.is_empty())

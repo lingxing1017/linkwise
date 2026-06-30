@@ -215,7 +215,6 @@ pub struct WebdavConfigPayload {
     pub webdav_url: Option<String>,
     pub username: Option<String>,
     pub password: Option<String>,
-    pub remote_dir: Option<String>,
     pub filename: Option<String>,
 }
 
@@ -223,7 +222,6 @@ pub struct WebdavConfigPayload {
 pub struct WebdavConfig {
     pub webdav_url: String,
     pub username: String,
-    pub remote_dir: String,
     pub filename: String,
     pub has_password: bool,
     pub password_security: &'static str,

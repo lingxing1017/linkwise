@@ -715,7 +715,6 @@ def test_webdav_config_updates_metadata_without_password(api_client):
         {
             "webdav_url": f"https://dav-{marker}.example.test",
             "username": f"user-{marker}",
-            "remote_dir": f"Linkwise/{marker}",
             "filename": f"backup-{marker}.html",
         },
     )
@@ -725,7 +724,7 @@ def test_webdav_config_updates_metadata_without_password(api_client):
     assert result["status"] == "success"
     assert result["config"]["webdav_url"] == f"https://dav-{marker}.example.test"
     assert result["config"]["username"] == f"user-{marker}"
-    assert result["config"]["remote_dir"] == f"Linkwise/{marker}"
+    assert "remote_dir" not in result["config"]
     assert result["config"]["filename"] == f"backup-{marker}.html"
     assert "password" not in result["config"]
 
@@ -739,7 +738,6 @@ def test_webdav_config_requires_secret_for_password(api_client):
             "webdav_url": f"https://dav-{marker}.example.test",
             "username": f"user-{marker}",
             "password": "secret-password",
-            "remote_dir": "Linkwise",
             "filename": "backup.html",
         },
     )
