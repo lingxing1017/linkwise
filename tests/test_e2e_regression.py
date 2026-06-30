@@ -523,6 +523,7 @@ def test_settings_dialog_stays_inside_viewport(page, live_server):
             return {
                 top: rect.top,
                 bottom: rect.bottom,
+                width: rect.width,
                 viewportHeight: window.innerHeight,
                 overflowY: style.overflowY
             };
@@ -531,6 +532,7 @@ def test_settings_dialog_stays_inside_viewport(page, live_server):
     )
     assert box_metrics["top"] >= 0
     assert box_metrics["bottom"] <= box_metrics["viewportHeight"]
+    assert box_metrics["width"] <= 641
     assert box_metrics["overflowY"] == "hidden"
 
     assert page.locator("#settings-tab-backup").get_attribute("aria-selected") == "true"

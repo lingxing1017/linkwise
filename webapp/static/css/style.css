@@ -1574,7 +1574,7 @@ body[data-density="compact"] .folder-row {
 }
 
 .settings-box {
-    width: min(92vw, 720px);
+    width: min(92vw, 640px);
     display: flex;
     flex-direction: column;
     max-height: calc(100vh - 56px);
@@ -1723,8 +1723,8 @@ body[data-density="compact"] .folder-row {
 
 .settings-form-grid .input-group {
     display: grid;
-    grid-template-columns: 160px minmax(0, 1fr);
-    gap: 18px;
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: 16px;
     align-items: start;
     margin-bottom: 0;
 }
