@@ -32,7 +32,6 @@ const brandAuthRing = document.getElementById('brand-auth-ring');
 const brandAuthTooltip = document.getElementById('brand-auth-tooltip');
 const darkModeQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 const densityMenu = document.getElementById('density-menu');
-const densityCurrentLabel = document.getElementById('density-current-label');
 const bookmarkListHeader = document.getElementById('bookmark-list-header');
 const bulkSelectedCount = document.getElementById('bulk-selected-count');
 const bulkMiniBar = document.getElementById('bulk-mini-bar');
@@ -63,10 +62,6 @@ const LAST_IMPORT_VIEW = '__LAST_IMPORT__';
 const UNCATEGORIZED_VIEW = '__UNCATEGORIZED__';
 const BOOKMARK_DENSITY_KEY = 'linkwise-bookmark-density';
 const BOOKMARK_DENSITIES = new Set(['comfortable', 'compact']);
-const BOOKMARK_DENSITY_LABELS = {
-    comfortable: '舒适',
-    compact: '紧凑'
-};
 let authState = {
     public_read: true,
     admin_initialized: false,

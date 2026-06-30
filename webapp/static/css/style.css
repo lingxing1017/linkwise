@@ -748,7 +748,8 @@ body.readonly-mode .brand-settings-btn {
     right: 0;
     top: calc(100% + 10px);
     z-index: 30;
-    min-width: 186px;
+    min-width: 0;
+    width: max-content;
     padding: 6px;
     border: 1px solid var(--floating-border);
     border-radius: 14px;
@@ -773,7 +774,7 @@ body.readonly-mode .brand-settings-btn {
     display: flex;
     align-items: center;
     gap: 9px;
-    padding: 0 10px;
+    padding: 0 8px;
     font-size: 13px;
     font-weight: 750;
     text-align: left;
@@ -794,18 +795,21 @@ body.readonly-mode .brand-settings-btn {
     position: relative;
 }
 
+.topbar-more-submenu-wrapper::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 100%;
+    bottom: 0;
+    width: 8px;
+}
+
 .topbar-more-submenu-trigger {
     padding-right: 8px;
 }
 
-.topbar-more-value {
-    margin-left: auto;
-    color: var(--muted-2);
-    font-size: 12px;
-    font-weight: 700;
-}
-
 .topbar-more-arrow {
+    margin-left: auto;
     color: var(--muted-2);
     font-size: 16px;
     line-height: 1;
@@ -816,7 +820,8 @@ body.readonly-mode .brand-settings-btn {
     top: 0;
     right: calc(100% + 8px);
     z-index: 31;
-    min-width: 118px;
+    min-width: 0;
+    width: max-content;
     padding: 6px;
     border: 1px solid var(--floating-border);
     border-radius: 14px;
@@ -832,7 +837,7 @@ body.readonly-mode .brand-settings-btn {
 }
 
 .density-option {
-    gap: 8px;
+    gap: 6px;
 }
 
 .density-check {
@@ -2147,6 +2152,10 @@ body.readonly-mode .bulk-mini-bar {
 
     .topbar-more-panel {
         min-width: 196px;
+    }
+
+    .topbar-more-submenu-wrapper::before {
+        content: none;
     }
 
     .topbar-more-submenu {

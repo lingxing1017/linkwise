@@ -8,10 +8,6 @@ function getStoredBookmarkDensity() {
 }
 
 function updateDensityMenu(density) {
-    if (densityCurrentLabel) {
-        densityCurrentLabel.textContent = BOOKMARK_DENSITY_LABELS[density] || BOOKMARK_DENSITY_LABELS.comfortable;
-    }
-
     document.querySelectorAll('[data-density-option]').forEach((option) => {
         const isActive = option.dataset.densityOption === density;
         option.classList.toggle('active', isActive);
