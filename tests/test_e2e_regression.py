@@ -539,10 +539,20 @@ def test_settings_dialog_stays_inside_viewport(page, live_server):
     assert page.locator("#settings-panel-backup .settings-status-card").is_visible()
     assert page.locator("#settings-panel-backup .btn-save", has_text="保存").is_visible()
     assert page.locator("#settings-panel-backup .settings-secondary-actions").is_visible()
+    assert page.locator("#webdav-remote-dir").count() == 0
+    assert page.locator("#settings-panel-backup .input-help").count() == 0
     assert page.locator(".settings-box > .dialog-actions .btn-save").count() == 0
     assert page.locator("#settings-panel-backup").evaluate(
         "node => getComputedStyle(node).overflowY"
     ) == "auto"
+    assert page.locator("#settings-panel-backup").evaluate(
+        """
+        (node) => {
+            const style = getComputedStyle(node);
+            return Number.parseFloat(style.paddingRight) > Number.parseFloat(style.marginRight) * -1;
+        }
+        """
+    )
     fixed_regions = page.evaluate(
         """
         () => {
@@ -638,7 +648,6 @@ def test_auth_management_lists_app_devices_without_tokens(page, live_server):
                     "config": {
                         "webdav_url": "",
                         "username": "",
-                        "remote_dir": "",
                         "filename": "linkwise-bookmarks.html",
                         "has_password": False,
                         "password_security": "none",

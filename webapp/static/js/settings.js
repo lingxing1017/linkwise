@@ -23,10 +23,6 @@ async function loadWebdavConfig() {
             : 'WebDAV 密码或 App Password';
     }
 
-    if (webdavRemoteDirInput) {
-        webdavRemoteDirInput.value = config.remote_dir || '';
-    }
-
     if (webdavFilenameInput) {
         webdavFilenameInput.value = config.filename || 'linkwise-bookmarks.html';
     }
@@ -65,7 +61,6 @@ function getWebdavConfigPayload() {
         webdav_url: webdavUrlInput ? webdavUrlInput.value.trim() : '',
         username: webdavUsernameInput ? webdavUsernameInput.value.trim() : '',
         password: webdavPasswordInput ? webdavPasswordInput.value : '',
-        remote_dir: webdavRemoteDirInput ? webdavRemoteDirInput.value.trim() : '',
         filename: webdavFilenameInput ? webdavFilenameInput.value.trim() : ''
     };
 }

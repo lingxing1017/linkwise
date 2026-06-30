@@ -1630,7 +1630,9 @@ body[data-density="compact"] .folder-row {
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding-right: 4px;
+    margin-right: -10px;
+    padding-right: 18px;
+    scrollbar-gutter: stable;
 }
 
 .settings-status-card {
@@ -1731,16 +1733,8 @@ body[data-density="compact"] .folder-row {
     margin: 13px 0 0;
 }
 
-.settings-form-grid .input-group input,
-.settings-form-grid .input-help {
+.settings-form-grid .input-group input {
     grid-column: 2;
-}
-
-.input-help {
-    margin-top: 7px;
-    color: var(--muted-2);
-    font-size: 12px;
-    font-weight: 650;
 }
 
 .settings-panel-actions {
@@ -2184,8 +2178,7 @@ body.readonly-mode .bulk-mini-bar {
         margin: 0;
     }
 
-    .settings-form-grid .input-group input,
-    .settings-form-grid .input-help {
+    .settings-form-grid .input-group input {
         grid-column: auto;
     }
 
