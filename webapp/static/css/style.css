@@ -319,6 +319,25 @@ body.readonly-mode .brand-settings-btn {
     cursor: default;
 }
 
+.folder-item .folder-left,
+.folder-item .folder-icon,
+.folder-item .folder-name,
+.folder-item .folder-count,
+.bookmark-row .bookmark-letter,
+.bookmark-row .bookmark-text,
+.bookmark-row .bookmark-title,
+.bookmark-row .bookmark-domain,
+.bookmark-row .bookmark-folder {
+    cursor: inherit;
+}
+
+.bookmark-list-header,
+.bookmark-header-title,
+.bookmark-header-folder,
+.bookmark-header-actions {
+    cursor: default;
+}
+
 .folder-item.sortable:active,
 .bookmark-row.sortable:active {
     cursor: grabbing;
